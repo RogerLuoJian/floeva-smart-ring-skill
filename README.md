@@ -12,7 +12,7 @@ Works with **Claude Code**, **OpenClaw**, and other AI Agent platforms that supp
 
 ## Prerequisites
 
-- A Floeva smart ring (X6 or QRing)
+- A Floeva smart ring 
 - A Floeva API Key (get one from Floeva App -> Profile -> Account & Security -> API Key)
 
 ## Installation
