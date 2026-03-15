@@ -2,10 +2,12 @@
 name: floeva-smart-ring
 description: >
   Connect to Floeva health platform API. Use when the user wants to
-  query health data, list available tools, execute health tools, or
-  get a health overview from their Floeva smart ring. Triggers on:
+  query health data, list available tools, execute health tools,
+  get a health overview from their Floeva smart ring, or ask questions
+  about ring usage, FAQ, troubleshooting, and product help. Triggers on:
   floeva, health data, smart ring, flow score, heart rate, HRV,
-  sleep data, health overview, ring data.
+  sleep data, health overview, ring data, help, FAQ, how to use,
+  troubleshooting, charging, waterproof, warranty, setup.
 allowed-tools:
   - Bash
   - Read
@@ -101,6 +103,25 @@ curl -s -m 30 -w "\n%{http_code}" -H "Authorization: Bearer $API_KEY" \
 ```
 
 Present the health data in natural language — summarize key metrics like sleep quality, heart rate trends, step counts, and Flow score.
+
+### Help & FAQ
+
+When the user asks about ring usage, troubleshooting, product questions, or FAQ (e.g., "how do I charge the ring", "is it waterproof", "what's the warranty"):
+
+```bash
+curl -s -m 30 -w "\n%{http_code}" -X POST \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"toolName": "get_help", "arguments": {"query": "<keywords>", "language": "zh"}}' \
+  "$BASE_URL/open/v1/tool/execute"
+```
+
+Parameters (all optional):
+- `query`: Search keywords matching questions and answers (e.g., "charging", "waterproof", "sleep")
+- `category`: Filter by section ID — one of: `product-basics`, `pre-purchase`, `setup-connection`, `wearing-guide`, `features-tracking`, `battery-charging`, `waterproof-durability`, `troubleshooting`, `health-safety`, `pricing-subscription`, `tech-specs`
+- `language`: `"zh"` (default) or `"en"`
+
+If no parameters are passed, returns the full FAQ catalog (questions only, no answers) — useful for browsing all available topics.
 
 ### Execute a Specific Tool
 
