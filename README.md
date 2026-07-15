@@ -57,7 +57,7 @@ API Key and server settings are stored in `~/.floeva/config.json`:
 ```json
 {
   "api_key": "fv_sk_xxx",
-  "base_url": "https://us.getfloeva.com/ring/api"
+  "base_url": "https://server.floeva.cn/ring/api"
 }
 ```
 

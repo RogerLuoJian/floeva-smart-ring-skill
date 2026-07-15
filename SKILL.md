@@ -48,7 +48,7 @@ After the user provides the key, validate it:
 ```bash
 API_KEY="<user_provided_key>"
 curl -s -m 30 -w "\n%{http_code}" -H "Authorization: Bearer $API_KEY" \
-  https://us.getfloeva.com/ring/api/open/v1/tool/list
+  https://server.floeva.cn/ring/api/open/v1/tool/list
 ```
 
 - If HTTP 200: save the configuration and proceed to Step 3
@@ -60,7 +60,7 @@ To save the configuration (create directory, write file, set permissions):
 mkdir -p ~/.floeva && cat > ~/.floeva/config.json << ENDCONFIG
 {
   "api_key": "$API_KEY",
-  "base_url": "https://us.getfloeva.com/ring/api"
+  "base_url": "https://server.floeva.cn/ring/api"
 }
 ENDCONFIG
 chmod 600 ~/.floeva/config.json
