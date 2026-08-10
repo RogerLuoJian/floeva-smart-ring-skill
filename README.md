@@ -1,86 +1,47 @@
 # Floeva Smart Ring Skill
 
-An AI Agent skill that connects to the [Floeva](https://getfloeva.com) health platform, enabling AI assistants to query your smart ring health data.
+An official Agent skill for securely connecting to [Floeva](https://getfloeva.com) smart-ring health data.
 
-Works with **Claude Code**, **OpenClaw**, and other AI Agent platforms that support Markdown-based skills.
+## What it does
 
-## What It Does
+- Opens a Floeva-owned webpage for authorization—no API key copy/paste
+- Reads health overviews, sleep, heart rate, HRV, steps, and Flow score
+- Discovers and executes available health tools
+- Answers product help and troubleshooting questions
+- Supports Floeva Global and 芙洛怡 China data planes
 
-- **Health Overview** — Get a summary of your health metrics (sleep, heart rate, steps, Flow score)
-- **List Tools** — Discover available health data queries
-- **Execute Tools** — Query specific health data (heart rate history, sleep details, HRV, etc.)
+## Install
 
-## Prerequisites
-
-- A Floeva smart ring 
-- A Floeva API Key (get one from Floeva App -> Profile -> Account & Security -> API Key)
-
-## Installation
-
-### Claude Code
+Clone the repository, then run the installer:
 
 ```bash
-mkdir -p ~/.claude/skills/floeva-smart-ring
-curl -o ~/.claude/skills/floeva-smart-ring/SKILL.md \
-  https://raw.githubusercontent.com/RogerLuoJian/floeva-smart-ring-skill/main/SKILL.md
+git clone https://github.com/RogerLuoJian/floeva-smart-ring-skill.git
+cd floeva-smart-ring-skill
+./install.sh
 ```
 
-### OpenClaw
+The installer detects Codex, Claude Code, and OpenClaw and copies both the skill instructions and the web-authorization helper.
 
-```bash
-mkdir -p ~/.openclaw/skills/floeva-smart-ring
-curl -o ~/.openclaw/skills/floeva-smart-ring/SKILL.md \
-  https://raw.githubusercontent.com/RogerLuoJian/floeva-smart-ring-skill/main/SKILL.md
-```
+## Use
 
-### One-Line Install (Auto-Detect)
+Start a new Agent session and ask naturally:
 
-```bash
-curl -sSL https://raw.githubusercontent.com/RogerLuoJian/floeva-smart-ring-skill/main/install.sh | bash
-```
+- “Show my Floeva health overview.”
+- “How did I sleep last night?”
+- “What is my heart-rate trend?”
+- “How do I charge my Floeva ring?”
 
-## Usage
+On first use, the Agent asks whether you use Floeva Global or China, then gives you a short-lived Floeva website link and matching code. Sign in on that page, approve, and return to the Agent.
 
-Once installed, start a new AI session and ask naturally:
-
-- "Show my health overview"
-- "How did I sleep last night?"
-- "What's my heart rate trend?"
-- "What can Floeva do?"
-
-On first use, the AI will guide you through API Key setup. Your key is saved to `~/.floeva/config.json` and shared across all platforms.
-
-## Configuration
-
-API Key and server settings are stored in `~/.floeva/config.json`:
-
-```json
-{
-  "api_key": "fv_sk_xxx",
-  "base_url": "https://server.floeva.cn/ring/api"
-}
-```
-
-This file is created automatically on first use with `chmod 600` permissions.
-
-## Security
-
-- API Key stored locally with restricted file permissions (`chmod 600`)
-- Key is never hardcoded in commands — always read into shell variables
-- Config file is platform-independent, shared across AI agents
-- All API calls use HTTPS
+Authorization is stored in `~/.floeva/config.json` with file mode `0600`. The access token is time-limited and can be replaced by authorizing again. Existing legacy `api_key` configs remain supported during migration.
 
 ## Uninstall
 
 ```bash
-# Remove from Claude Code
+rm -rf ~/.codex/skills/floeva-smart-ring
 rm -rf ~/.claude/skills/floeva-smart-ring
-
-# Remove from OpenClaw
 rm -rf ~/.openclaw/skills/floeva-smart-ring
-
-# Remove config (optional — removes your API Key)
-rm -rf ~/.floeva
+rm -rf ~/.floeva  # optional: removes authorization data
 ```
 
 ## License

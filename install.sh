@@ -1,54 +1,41 @@
-#!/bin/bash
-# Floeva Smart Ring Skill - Auto Installer
-# Detects Claude Code and OpenClaw, installs to all available platforms.
+#!/bin/sh
+set -eu
 
-set -e
-
-SKILL_URL="https://raw.githubusercontent.com/RogerLuoJian/floeva-smart-ring-skill/main/SKILL.md"
-SKILL_FILE="SKILL.md"
+REPO_RAW="https://raw.githubusercontent.com/RogerLuoJian/floeva-smart-ring-skill/main"
+SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+TEMP_DIR=""
 INSTALLED=0
 
-# Use local SKILL.md if running from repo directory, otherwise download
-if [ -f "$SKILL_FILE" ]; then
-  SOURCE="local"
-else
-  SOURCE="remote"
-  echo "Downloading SKILL.md..."
-  curl -sSL -o /tmp/floeva-smart-ring-SKILL.md "$SKILL_URL"
-  SKILL_FILE="/tmp/floeva-smart-ring-SKILL.md"
+cleanup() {
+  [ -z "$TEMP_DIR" ] || rm -rf "$TEMP_DIR"
+}
+trap cleanup EXIT HUP INT TERM
+
+if [ ! -f "$SOURCE_DIR/SKILL.md" ] || [ ! -f "$SOURCE_DIR/scripts/floeva-auth.sh" ]; then
+  TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/floeva-skill.XXXXXX")
+  mkdir -p "$TEMP_DIR/scripts"
+  curl -sSLo "$TEMP_DIR/SKILL.md" "$REPO_RAW/SKILL.md"
+  curl -sSLo "$TEMP_DIR/scripts/floeva-auth.sh" "$REPO_RAW/scripts/floeva-auth.sh"
+  SOURCE_DIR="$TEMP_DIR"
 fi
 
-# Install to Claude Code
-CLAUDE_DIR="$HOME/.claude/skills/floeva-smart-ring"
-if [ -d "$HOME/.claude" ]; then
-  mkdir -p "$CLAUDE_DIR"
-  cp "$SKILL_FILE" "$CLAUDE_DIR/SKILL.md"
-  echo "[OK] Installed to Claude Code: $CLAUDE_DIR"
+install_to() {
+  target="$1"
+  mkdir -p "$target/scripts"
+  cp "$SOURCE_DIR/SKILL.md" "$target/SKILL.md"
+  cp "$SOURCE_DIR/scripts/floeva-auth.sh" "$target/scripts/floeva-auth.sh"
+  chmod 755 "$target/scripts/floeva-auth.sh"
+  printf '%s\n' "[OK] Installed: $target"
   INSTALLED=$((INSTALLED + 1))
-fi
+}
 
-# Install to OpenClaw
-OPENCLAW_DIR="$HOME/.openclaw/skills/floeva-smart-ring"
-if [ -d "$HOME/.openclaw" ]; then
-  mkdir -p "$OPENCLAW_DIR"
-  cp "$SKILL_FILE" "$OPENCLAW_DIR/SKILL.md"
-  echo "[OK] Installed to OpenClaw: $OPENCLAW_DIR"
-  INSTALLED=$((INSTALLED + 1))
-fi
+[ ! -d "$HOME/.codex" ] || install_to "$HOME/.codex/skills/floeva-smart-ring"
+[ ! -d "$HOME/.claude" ] || install_to "$HOME/.claude/skills/floeva-smart-ring"
+[ ! -d "$HOME/.openclaw" ] || install_to "$HOME/.openclaw/skills/floeva-smart-ring"
 
-# Cleanup temp file
-if [ "$SOURCE" = "remote" ] && [ -f /tmp/floeva-smart-ring-SKILL.md ]; then
-  rm /tmp/floeva-smart-ring-SKILL.md
-fi
-
-if [ $INSTALLED -eq 0 ]; then
-  echo "No supported AI agent platform found (~/.claude or ~/.openclaw)."
-  echo ""
-  echo "Manual install:"
-  echo "  Claude Code: mkdir -p ~/.claude/skills/floeva-smart-ring && cp SKILL.md ~/.claude/skills/floeva-smart-ring/"
-  echo "  OpenClaw:    mkdir -p ~/.openclaw/skills/floeva-smart-ring && cp SKILL.md ~/.openclaw/skills/floeva-smart-ring/"
+if [ "$INSTALLED" -eq 0 ]; then
+  printf '%s\n' "No supported Agent directory found (~/.codex, ~/.claude, or ~/.openclaw)." >&2
   exit 1
 fi
 
-echo ""
-echo "Done! Start a new AI session and ask: \"Show my health overview\""
+printf '%s\n' "Done. Start a new Agent session and ask: Show my Floeva health overview."
