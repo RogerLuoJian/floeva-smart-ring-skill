@@ -326,6 +326,7 @@ class InstallerTest(unittest.TestCase):
             target = home / ".codex" / "skills" / "floeva-smart-ring"
             self.assertTrue((target / "SKILL.md").is_file())
             self.assertTrue((target / "agents" / "openai.yaml").is_file())
+            self.assertTrue((target / "references" / "data-presentation.md").is_file())
             self.assertTrue((target / "scripts" / "floeva-auth.sh").is_file())
             self.assertTrue((target / "scripts" / "floeva-auth.py").is_file())
             self.assertTrue(os.access(target / "scripts" / "floeva-auth.sh", os.X_OK))

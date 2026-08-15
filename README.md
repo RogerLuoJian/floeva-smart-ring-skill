@@ -6,6 +6,7 @@ An official Agent skill for securely connecting to [Floeva](https://getfloeva.co
 
 - Opens a Floeva-owned webpage for authorization—no API key copy/paste
 - Reads health overviews, sleep, heart rate, HRV, steps, and Flow score
+- Presents compact health snapshots, readable trend tables, and accessible sparklines
 - Discovers and executes available health tools
 - Answers product help and troubleshooting questions
 - Supports Floeva Global and 芙洛怡 China data planes
@@ -30,6 +31,11 @@ Start a new Agent session and ask naturally:
 - “How did I sleep last night?”
 - “What is my heart-rate trend?”
 - “How do I charge my Floeva ring?”
+
+Health answers lead with the useful observation, then show a compact snapshot,
+comparable trends, and data coverage. Missing sensor data stays visibly distinct
+from a recorded zero, and personal-baseline comparisons appear only after Floeva
+has enough data to establish one.
 
 On first use, the Agent asks whether you use Floeva Global or China, then gives you a 10-minute Floeva website link and matching code. Sign in on that page, approve, and return to the Agent. The resulting access token is valid for up to 90 days and can be revoked from Floeva's API credential management screen.
 

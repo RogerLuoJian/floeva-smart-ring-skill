@@ -13,6 +13,7 @@ trap cleanup EXIT HUP INT TERM
 if [ ! -f "$SOURCE_DIR/SKILL.md" ] \
   || [ ! -f "$SOURCE_DIR/scripts/floeva-auth.sh" ] \
   || [ ! -f "$SOURCE_DIR/scripts/floeva-auth.py" ] \
+  || [ ! -f "$SOURCE_DIR/references/data-presentation.md" ] \
   || [ ! -f "$SOURCE_DIR/agents/openai.yaml" ]; then
   printf '%s\n' "Run install.sh from a complete floeva-smart-ring-skill checkout." >&2
   exit 1
@@ -43,6 +44,7 @@ install_to() {
   # remain usable if an update is interrupted before the final atomic replace.
   install_file "$SOURCE_DIR/scripts/floeva-auth.py" "$target/scripts/floeva-auth.py" 755
   install_file "$SOURCE_DIR/agents/openai.yaml" "$target/agents/openai.yaml" 644
+  install_file "$SOURCE_DIR/references/data-presentation.md" "$target/references/data-presentation.md" 644
   install_file "$SOURCE_DIR/scripts/floeva-auth.sh" "$target/scripts/floeva-auth.sh" 755
   install_file "$SOURCE_DIR/SKILL.md" "$target/SKILL.md" 644
   printf '%s\n' "[OK] Installed: $target"

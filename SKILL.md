@@ -74,6 +74,11 @@ AUTH_MODE=$(python3 -c "import json,os; c=json.load(open(os.path.expanduser('~/.
 
 Always send `Authorization: Bearer $ACCESS_TOKEN` over HTTPS.
 
+Before presenting any successful health-data response, read
+`references/data-presentation.md` completely. Use its hierarchy, units,
+missing-data rules, and compact Markdown templates. Lead with the finding,
+not the endpoint or raw JSON.
+
 ### List capabilities
 
 ```bash
@@ -92,7 +97,11 @@ curl -sS -m 30 -w "\n%{http_code}" \
   "$BASE_URL/open/v1/health/overview"
 ```
 
-Summarize sleep, heart-rate trends, steps, and Flow score in warm, non-diagnostic language.
+Summarize sleep, heart-rate trends, steps, and available baseline context in
+warm, non-diagnostic language. For a complete overview that includes Flow, or
+whenever the user asks about Flow, also execute `get_flow_score_detail` for the
+requested date. Pass the user's IANA timezone when it is known. Do not infer a
+Flow score from the other health metrics.
 
 ### Help and FAQ
 
@@ -123,6 +132,9 @@ curl -sS -m 30 -w "\n%{http_code}" -X POST \
 ```
 
 Interpret the result for the user; do not present raw health data as a medical diagnosis.
+Apply the presentation contract to specific-tool results too. Prefer a compact
+trend table or sparkline for comparable dated values, and show data coverage
+beside any interpretation that depends on sample count or days recorded.
 
 ## 4. Handle errors
 
