@@ -115,6 +115,26 @@ class AuthorizationHelperTest(unittest.TestCase):
                     {"client_id": AUTH.CLIENT_ID, "scope": AUTH.SCOPE},
                 )
 
+    def test_request_uses_explicit_json_and_skill_identity_headers(self) -> None:
+        response = mock.MagicMock()
+        response.__enter__.return_value.status = 200
+        response.__enter__.return_value.read.return_value = b'{"ok":true}'
+        opener = mock.Mock()
+        opener.open.return_value = response
+
+        with mock.patch.object(AUTH.urllib.request, "build_opener", return_value=opener):
+            status, payload = AUTH._request_json(
+                "https://us.getfloeva.com/ring/api/open/oauth/device/code",
+                {"client_id": AUTH.CLIENT_ID, "scope": AUTH.SCOPE},
+            )
+
+        request = opener.open.call_args.args[0]
+        self.assertEqual(200, status)
+        self.assertEqual({"ok": True}, payload)
+        self.assertEqual("application/json", request.get_header("Accept"))
+        self.assertEqual("application/json", request.get_header("Content-type"))
+        self.assertEqual(AUTH.USER_AGENT, request.get_header("User-agent"))
+
     def test_pending_then_success_preserves_old_config_until_exchange(self) -> None:
         AUTH._atomic_write_json(
             AUTH.CONFIG_FILE,

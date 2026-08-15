@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlparse
 
 CLIENT_ID = "floeva-smart-ring-skill"
 SCOPE = "health:read"
+USER_AGENT = "Floeva-Smart-Ring-Skill/1.0"
 EXPIRY_SKEW_SECONDS = 60
 REGIONS = {
     "global": {
@@ -93,7 +94,11 @@ def _request_json(
     payload: dict[str, Any],
     headers: dict[str, str] | None = None,
 ) -> tuple[int, dict[str, Any]]:
-    request_headers = {"Content-Type": "application/json"}
+    request_headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": USER_AGENT,
+    }
     if headers:
         request_headers.update(headers)
     request = urllib.request.Request(
