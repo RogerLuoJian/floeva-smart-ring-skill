@@ -327,10 +327,19 @@ class InstallerTest(unittest.TestCase):
             self.assertTrue((target / "SKILL.md").is_file())
             self.assertTrue((target / "agents" / "openai.yaml").is_file())
             self.assertTrue((target / "references" / "data-presentation.md").is_file())
+            self.assertTrue((target / "references" / "health-canvas.md").is_file())
             self.assertTrue((target / "scripts" / "floeva-auth.sh").is_file())
             self.assertTrue((target / "scripts" / "floeva-auth.py").is_file())
+            self.assertTrue((target / "scripts" / "floeva-report.py").is_file())
+            self.assertTrue((target / "assets" / "health-report" / "index.html").is_file())
+            self.assertTrue((target / "assets" / "health-report" / "app.css").is_file())
+            self.assertTrue((target / "assets" / "health-report" / "app.js").is_file())
+            self.assertTrue(
+                (target / "assets" / "health-report" / "fonts" / "Inter-Bold.ttf").is_file()
+            )
             self.assertTrue(os.access(target / "scripts" / "floeva-auth.sh", os.X_OK))
             self.assertTrue(os.access(target / "scripts" / "floeva-auth.py", os.X_OK))
+            self.assertTrue(os.access(target / "scripts" / "floeva-report.py", os.X_OK))
 
     def test_install_failure_keeps_existing_skill_instructions(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

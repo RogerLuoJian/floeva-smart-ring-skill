@@ -6,7 +6,10 @@ An official Agent skill for securely connecting to [Floeva](https://getfloeva.co
 
 - Opens a Floeva-owned webpage for authorization—no API key copy/paste
 - Reads health overviews, sleep, heart rate, HRV, steps, and Flow score
-- Presents compact health snapshots, readable trend tables, and accessible sparklines
+- Opens an immersive Floeva Health Canvas with a rhythm landscape, insight rail,
+  sleep structure, activity trace, and heart-range portrait
+- Falls back to compact health snapshots, readable trend tables, and accessible
+  sparklines when a local browser is unavailable
 - Discovers and executes available health tools
 - Answers product help and troubleshooting questions
 - Supports Floeva Global and 芙洛怡 China data planes
@@ -21,21 +24,29 @@ cd floeva-smart-ring-skill
 ./install.sh
 ```
 
-The installer must run from a complete repository checkout; it does not execute or assemble runtime files from a mutable remote branch. It detects Codex, Claude Code, and OpenClaw, validates the checked-out files, and installs the skill instructions, UI metadata, and web-authorization helper.
+The installer must run from a complete repository checkout; it does not execute
+or assemble runtime files from a mutable remote branch. It detects Codex,
+Claude Code, and OpenClaw, validates the checked-out files, and installs the
+skill instructions, UI metadata, web-authorization helper, local report
+runtime, bundled fonts, and Floeva-owned visual assets.
 
 ## Use
 
 Start a new Agent session and ask naturally:
 
 - “Show my Floeva health overview.”
+- “把我的健康数据做成漂亮的可视化报告。”
 - “How did I sleep last night?”
 - “What is my heart-rate trend?”
 - “How do I charge my Floeva ring?”
 
-Health answers lead with the useful observation, then show a compact snapshot,
-comparable trends, and data coverage. Missing sensor data stays visibly distinct
-from a recorded zero, and personal-baseline comparisons appear only after Floeva
-has enough data to establish one.
+For a complete overview, the Skill opens a private local Health Canvas when a
+browser is available. The Canvas is an original Floeva presentation: a spacious
+lavender-to-warm-peach rhythm landscape paired with a frosted insight rail,
+rather than a generic analytics chart. Health answers still lead with a useful
+observation in the conversation. Missing sensor data stays visibly distinct
+from a recorded zero, and personal-baseline comparisons appear only after
+Floeva has enough data to establish one.
 
 On first use, the Agent asks whether you use Floeva Global or China, then gives you a 10-minute Floeva website link and matching code. Sign in on that page, approve, and return to the Agent. The resulting access token is valid for up to 90 days and can be revoked from Floeva's API credential management screen.
 
@@ -63,6 +74,12 @@ Existing configs containing `api_key` and `base_url` continue to work unchanged.
 - Access tokens and pending device codes are stored only under `~/.floeva` with restricted permissions.
 - Config updates use an atomic replace, so an interrupted authorization does not corrupt an existing credential.
 - Verification links are accepted only from the expected HTTPS Floeva domain for the selected region.
+- Visual reports bind only to `127.0.0.1`, use opaque session URLs, expire after
+  one hour, and are stored under `~/.floeva/reports` with private permissions.
+- Only health response data enters the browser report. Access tokens, API keys,
+  passwords, device codes, config files, and remote API URLs do not.
+- The report uses bundled local fonts and assets; it makes no third-party web
+  requests and disables caching, referrers, and framing.
 
 ## Uninstall
 

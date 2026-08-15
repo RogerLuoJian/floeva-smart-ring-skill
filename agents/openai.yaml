@@ -1,4 +1,7 @@
 interface:
   display_name: "Floeva Smart Ring"
-  short_description: "Authorize Floeva and explore your ring health data"
-  default_prompt: "Use $floeva-smart-ring to show my latest health overview."
+  short_description: "Explore ring health in a private visual canvas"
+  icon_small: "./assets/health-report/logo-icon.svg"
+  icon_large: "./assets/health-report/lotus.svg"
+  brand_color: "#7C3AED"
+  default_prompt: "Use $floeva-smart-ring to open my latest health overview as a private visual report."
