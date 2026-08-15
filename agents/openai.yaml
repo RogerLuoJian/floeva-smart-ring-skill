@@ -1,0 +1,4 @@
+interface:
+  display_name: "Floeva Smart Ring"
+  short_description: "Authorize Floeva and explore your ring health data"
+  default_prompt: "Use $floeva-smart-ring to show my latest health overview."

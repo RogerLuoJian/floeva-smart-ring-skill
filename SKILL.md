@@ -9,22 +9,6 @@ Use Floeva's official web authorization to access a user's smart-ring health dat
 
 ## 1. Load configuration
 
-Read `~/.floeva/config.json` if it exists. Accept either:
-
-- Current config: `access_token`, `base_url`, `expires_at`, `auth_mode: "device_authorization"`
-- Legacy config: `api_key`, `base_url`
-
-Treat a legacy `api_key` as the Bearer token so existing users are not interrupted. Offer web reauthorization only when the user asks to upgrade or the credential fails.
-
-If no credential exists, or the current token is expired, continue to web authorization.
-
-## 2. Authorize on the Floeva website
-
-Ask which Floeva service the user uses only when it is not already in config:
-
-- **Global** — Floeva international App, `https://us.getfloeva.com/ring/api`
-- **China** — 芙洛怡中国版, `https://server.floeva.cn/ring/api`
-
 Locate `scripts/floeva-auth.sh` beside this `SKILL.md`. If the platform does not expose the skill directory, check these installed paths:
 
 ```bash
@@ -32,6 +16,31 @@ Locate `scripts/floeva-auth.sh` beside this `SKILL.md`. If the platform does not
 ~/.claude/skills/floeva-smart-ring/scripts/floeva-auth.sh
 ~/.openclaw/skills/floeva-smart-ring/scripts/floeva-auth.sh
 ```
+
+Check credential status without printing the config or secret:
+
+```bash
+bash <skill-dir>/scripts/floeva-auth.sh status
+```
+
+- `oauth` with exit `0`: use the current `access_token`.
+- `legacy` with exit `0`: use the current `api_key` unchanged.
+- `expired` with exit `3`: continue to web authorization. Reuse the saved region.
+- `missing` with exit `1`: continue to web authorization.
+
+Accept either config shape:
+
+- Current config: `access_token`, `base_url`, `expires_at`, `auth_mode: "device_authorization"`
+- Legacy config: `api_key`, `base_url`
+
+Never display or `cat` the config file. Treat a legacy `api_key` as the Bearer token so existing users are not interrupted. Offer web reauthorization only when the user asks to upgrade or the credential fails.
+
+## 2. Authorize on the Floeva website
+
+Ask which Floeva service the user uses only when it is not already in config:
+
+- **Global** — Floeva international App, `https://us.getfloeva.com/ring/api`
+- **China** — 芙洛怡中国版, `https://server.floeva.cn/ring/api`
 
 Start authorization with `global` or `cn`:
 
@@ -47,7 +56,7 @@ After the user confirms, complete the exchange:
 bash <skill-dir>/scripts/floeva-auth.sh complete
 ```
 
-- Exit `0`: authorization succeeded; continue to the request.
+- Exit `0`: authorization succeeded; continue to the request. The credential is valid for up to 90 days.
 - Exit `2`: approval is still pending; ask the user to finish the website step and retry once they confirm.
 - Any other nonzero exit: show the script's safe error message. Restart authorization if the code expired.
 
@@ -55,16 +64,12 @@ Do not poll in a long blocking loop. The two-step interaction keeps authorizatio
 
 ## 3. Execute requests
 
-Read the credential without printing it:
+After `status` returns `oauth` or `legacy`, read the credential into shell variables without printing it:
 
 ```bash
-if command -v python3 >/dev/null 2>&1; then
-  ACCESS_TOKEN=$(python3 -c "import json,os; c=json.load(open(os.path.expanduser('~/.floeva/config.json'))); print(c.get('access_token') or c.get('api_key') or '')")
-  BASE_URL=$(python3 -c "import json,os; c=json.load(open(os.path.expanduser('~/.floeva/config.json'))); print(c['base_url'])")
-else
-  ACCESS_TOKEN=$(sed -n 's/.*"\(access_token\|api_key\)"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\2/p' ~/.floeva/config.json | head -n 1)
-  BASE_URL=$(sed -n 's/.*"base_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' ~/.floeva/config.json)
-fi
+ACCESS_TOKEN=$(python3 -c "import json,os; c=json.load(open(os.path.expanduser('~/.floeva/config.json'))); print(c.get('access_token') or c.get('api_key') or '')")
+BASE_URL=$(python3 -c "import json,os; c=json.load(open(os.path.expanduser('~/.floeva/config.json'))); print(c['base_url'])")
+AUTH_MODE=$(python3 -c "import json,os; c=json.load(open(os.path.expanduser('~/.floeva/config.json'))); print(c.get('auth_mode') or 'legacy')")
 ```
 
 Always send `Authorization: Bearer $ACCESS_TOKEN` over HTTPS.
@@ -123,7 +128,8 @@ Interpret the result for the user; do not present raw health data as a medical d
 
 The final line emitted by each request is the HTTP status.
 
-- `401`: run `floeva-auth.sh start <region>` and guide the user through web authorization again. Do not request an API key.
+- `401` with `AUTH_MODE=device_authorization`: restart web authorization in the saved region.
+- `401` with `AUTH_MODE=legacy`: explain that the legacy credential no longer works and offer web authorization. Do not ask the user to paste another API key.
 - `429`: explain that the daily call limit is reached; do not reauthorize.
 - Timeout/network failure: ask the user to retry after checking connectivity.
 - Other errors: show the response `msg` without exposing the credential or config file.
@@ -135,3 +141,4 @@ The final line emitted by each request is the HTTP status.
 - Never put access tokens in URLs, query strings, source files, or shell history.
 - Use only the verification URL returned by the Floeva API and only HTTPS Floeva domains.
 - Remove the short-lived `~/.floeva/device-authorization.json` after success or expiry.
+- Do not replace a working legacy config until web authorization succeeds and the new config is atomically stored.
