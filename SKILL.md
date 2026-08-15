@@ -1,197 +1,144 @@
 ---
 name: floeva-smart-ring
-description: >
-  Connect to Floeva health platform API. Use when the user wants to
-  query health data, list available tools, execute health tools,
-  get a health overview from their Floeva smart ring, or ask questions
-  about ring usage, FAQ, troubleshooting, and product help. Triggers on:
-  floeva, health data, smart ring, flow score, heart rate, HRV,
-  sleep data, health overview, ring data, help, FAQ, how to use,
-  troubleshooting, charging, waterproof, warranty, setup.
-allowed-tools:
-  - Bash
-  - Read
-  - Write
+description: Connect to the Floeva health platform through secure web authorization. Use when the user wants to query smart-ring health data, list or execute Floeva health tools, get a health overview, or ask about Floeva ring setup, charging, waterproofing, warranty, FAQ, and troubleshooting. Triggers include Floeva, smart ring, Flow score, sleep, heart rate, HRV, health overview, ring data, help, FAQ, setup, and troubleshooting.
 ---
 
 # Floeva Smart Ring
 
-Connect to the Floeva health platform to query smart ring health data, execute health tools, and get health overviews.
+Use Floeva's official web authorization to access a user's smart-ring health data. Never ask the user to paste an API key or password into the Agent conversation.
 
-## Step 1: Load Configuration
+## 1. Load configuration
 
-Before making any API call, read the user's Floeva configuration:
+Locate `scripts/floeva-auth.sh` beside this `SKILL.md`. If the platform does not expose the skill directory, check these installed paths:
 
 ```bash
-cat ~/.floeva/config.json 2>/dev/null
+~/.codex/skills/floeva-smart-ring/scripts/floeva-auth.sh
+~/.claude/skills/floeva-smart-ring/scripts/floeva-auth.sh
+~/.openclaw/skills/floeva-smart-ring/scripts/floeva-auth.sh
 ```
 
-If the file does not exist or does not contain `api_key`, go to **Step 2: First-Time Setup**. Otherwise, skip to **Step 3: Execute Request**.
-
-## Step 2: First-Time Setup
-
-If no API Key is configured, display this message to the user and ask them to provide their API Key:
-
-> **Floeva API Key Required**
->
-> To connect to your Floeva smart ring data, you need an API Key.
->
-> How to get one:
-> 1. Open Floeva App -> Profile -> Account & Security -> API Key
-> 2. Create a new API Key
-> 3. Copy the key (starts with `fv_sk_`)
->
-> Please paste your API Key:
-
-After the user provides the key, validate it:
+Check credential status without printing the config or secret:
 
 ```bash
-API_KEY="<user_provided_key>"
-curl -s -m 30 -w "\n%{http_code}" -H "Authorization: Bearer $API_KEY" \
-  https://server.floeva.cn/ring/api/open/v1/tool/list
+bash <skill-dir>/scripts/floeva-auth.sh status
 ```
 
-- If HTTP 200: save the configuration and proceed to Step 3
-- If not 200: tell the user the key is invalid, show the guidance message again
+- `oauth` with exit `0`: use the current `access_token`.
+- `legacy` with exit `0`: use the current `api_key` unchanged.
+- `expired` with exit `3`: continue to web authorization. Reuse the saved region.
+- `missing` with exit `1`: continue to web authorization.
 
-To save the configuration (create directory, write file, set permissions):
+Accept either config shape:
+
+- Current config: `access_token`, `base_url`, `expires_at`, `auth_mode: "device_authorization"`
+- Legacy config: `api_key`, `base_url`
+
+Never display or `cat` the config file. Treat a legacy `api_key` as the Bearer token so existing users are not interrupted. Offer web reauthorization only when the user asks to upgrade or the credential fails.
+
+## 2. Authorize on the Floeva website
+
+Ask which Floeva service the user uses only when it is not already in config:
+
+- **Global** — Floeva international App, `https://us.getfloeva.com/ring/api`
+- **China** — 芙洛怡中国版, `https://server.floeva.cn/ring/api`
+
+Start authorization with `global` or `cn`:
 
 ```bash
-mkdir -p ~/.floeva && cat > ~/.floeva/config.json << ENDCONFIG
-{
-  "api_key": "$API_KEY",
-  "base_url": "https://server.floeva.cn/ring/api"
-}
-ENDCONFIG
-chmod 600 ~/.floeva/config.json
+bash <skill-dir>/scripts/floeva-auth.sh start global
 ```
 
-## Step 3: Execute Request
+Show the returned Floeva URL and user code. Ask the user to open the URL, confirm the matching code, sign in on the Floeva-owned page, and tell you when approval is complete. Do not ask for their password.
 
-Read `api_key` and `base_url` from `~/.floeva/config.json`:
+After the user confirms, complete the exchange:
 
 ```bash
-if command -v python3 &>/dev/null; then
-  API_KEY=$(python3 -c "import json; c=json.load(open('$HOME/.floeva/config.json')); print(c['api_key'])")
-  BASE_URL=$(python3 -c "import json; c=json.load(open('$HOME/.floeva/config.json')); print(c['base_url'])")
-else
-  API_KEY=$(sed -n 's/.*"api_key"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' ~/.floeva/config.json)
-  BASE_URL=$(sed -n 's/.*"base_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' ~/.floeva/config.json)
-fi
+bash <skill-dir>/scripts/floeva-auth.sh complete
 ```
 
-Then match the user's intent to the appropriate endpoint.
+- Exit `0`: authorization succeeded; continue to the request. The credential is valid for up to 90 days.
+- Exit `2`: approval is still pending; ask the user to finish the website step and retry once they confirm.
+- Any other nonzero exit: show the script's safe error message. Restart authorization if the code expired.
 
-### List Available Tools
+Do not poll in a long blocking loop. The two-step interaction keeps authorization visible and gives the user control.
 
-When the user asks what tools/capabilities are available, or asks "what can Floeva do":
+## 3. Execute requests
+
+After `status` returns `oauth` or `legacy`, read the credential into shell variables without printing it:
 
 ```bash
-curl -s -m 30 -w "\n%{http_code}" -H "Authorization: Bearer $API_KEY" \
+ACCESS_TOKEN=$(python3 -c "import json,os; c=json.load(open(os.path.expanduser('~/.floeva/config.json'))); print(c.get('access_token') or c.get('api_key') or '')")
+BASE_URL=$(python3 -c "import json,os; c=json.load(open(os.path.expanduser('~/.floeva/config.json'))); print(c['base_url'])")
+AUTH_MODE=$(python3 -c "import json,os; c=json.load(open(os.path.expanduser('~/.floeva/config.json'))); print(c.get('auth_mode') or 'legacy')")
+```
+
+Always send `Authorization: Bearer $ACCESS_TOKEN` over HTTPS.
+
+### List capabilities
+
+```bash
+curl -sS -m 30 -w "\n%{http_code}" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
   "$BASE_URL/open/v1/tool/list"
 ```
 
-Present the tool list to the user in a readable format — tool name, description, and parameters.
+Present tool names, descriptions, and parameters clearly.
 
-### Health Overview
-
-When the user asks for a health summary, overview, or general health status:
+### Health overview
 
 ```bash
-curl -s -m 30 -w "\n%{http_code}" -H "Authorization: Bearer $API_KEY" \
+curl -sS -m 30 -w "\n%{http_code}" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
   "$BASE_URL/open/v1/health/overview"
 ```
 
-Present the health data in natural language — summarize key metrics like sleep quality, heart rate trends, step counts, and Flow score.
+Summarize sleep, heart-rate trends, steps, and Flow score in warm, non-diagnostic language.
 
-### Help & FAQ
-
-When the user asks about ring usage, troubleshooting, product questions, or FAQ (e.g., "how do I charge the ring", "is it waterproof", "what's the warranty"):
+### Help and FAQ
 
 ```bash
-curl -s -m 30 -w "\n%{http_code}" -X POST \
-  -H "Authorization: Bearer $API_KEY" \
+curl -sS -m 30 -w "\n%{http_code}" -X POST \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"toolName": "get_help", "arguments": {"query": "<keywords>", "language": "zh"}}' \
+  -d '{"toolName":"get_help","arguments":{"query":"<keywords>","language":"zh"}}' \
   "$BASE_URL/open/v1/tool/execute"
 ```
 
-Parameters (all optional):
-- `query`: Search keywords matching questions and answers (e.g., "charging", "waterproof", "sleep")
-- `category`: Filter by section ID — one of: `product-basics`, `pre-purchase`, `setup-connection`, `wearing-guide`, `features-tracking`, `battery-charging`, `waterproof-durability`, `troubleshooting`, `health-safety`, `pricing-subscription`, `tech-specs`
-- `language`: `"zh"` (default) or `"en"`
+Optional `get_help` arguments:
 
-If no parameters are passed, returns the full FAQ catalog (questions only, no answers) — useful for browsing all available topics.
+- `query`: keywords such as `charging`, `waterproof`, or `sleep`
+- `category`: `product-basics`, `pre-purchase`, `setup-connection`, `wearing-guide`, `features-tracking`, `battery-charging`, `waterproof-durability`, `troubleshooting`, `health-safety`, `pricing-subscription`, or `tech-specs`
+- `language`: `zh` or `en`
 
-### Execute a Specific Tool
+### Execute a specific health tool
 
-When the user asks for specific health data (e.g., "show my heart rate", "how did I sleep last night"):
-
-1. If tool names are not already known from a prior call, first call **List Available Tools** to find the matching tool name and required parameters
-2. Then execute:
+If the tool contract is unknown, list capabilities first. Then call:
 
 ```bash
-curl -s -m 30 -w "\n%{http_code}" -X POST \
-  -H "Authorization: Bearer $API_KEY" \
+curl -sS -m 30 -w "\n%{http_code}" -X POST \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"toolName": "<tool_name>", "arguments": {<tool_arguments>}}' \
+  -d '{"toolName":"<tool_name>","arguments":{<tool_arguments>}}' \
   "$BASE_URL/open/v1/tool/execute"
 ```
 
-Present the results in natural language, interpreting health metrics meaningfully for the user.
+Interpret the result for the user; do not present raw health data as a medical diagnosis.
 
-## Step 4: Handle Errors
+## 4. Handle errors
 
-After every curl call, check the HTTP status code. The `-w "\n%{http_code}"` flag appends the HTTP status code as the last line of output — everything before it is the JSON response body.
+The final line emitted by each request is the HTTP status.
 
-### HTTP 401 — Invalid or Expired Key
+- `401` with `AUTH_MODE=device_authorization`: restart web authorization in the saved region.
+- `401` with `AUTH_MODE=legacy`: explain that the legacy credential no longer works and offer web authorization. Do not ask the user to paste another API key.
+- `429`: explain that the daily call limit is reached; do not reauthorize.
+- Timeout/network failure: ask the user to retry after checking connectivity.
+- Other errors: show the response `msg` without exposing the credential or config file.
 
-Display:
+## Security rules
 
-> Your Floeva API Key is invalid or has expired. Please check your key status in Floeva App -> Profile -> Account & Security -> API Key, or generate a new one.
-
-Then go back to **Step 2** to collect a new key. Validate the new key before saving.
-
-### HTTP 429 — Rate Limited
-
-Display:
-
-> Daily API call limit reached. Please try again tomorrow, or check your quota in the Floeva App.
-
-Do **NOT** re-prompt for a new key. This is a quota issue, not a key issue.
-
-### Timeout or Network Error
-
-If curl fails with a timeout or connection error:
-
-> Unable to reach the Floeva server. Please check your network connection and try again.
-
-### Other Errors
-
-For any response where `code` is not 200, display the `msg` field from the response to the user.
-
-## Response Format Reference
-
-Success responses contain `code` and `data`:
-
-```json
-{
-  "code": 200,
-  "data": { ... }
-}
-```
-
-Error responses contain `code` and `msg`:
-
-```json
-{
-  "code": 401,
-  "msg": "error description"
-}
-```
-
-## Security Notes
-
-- API Key is stored in `~/.floeva/config.json` with `chmod 600` permissions
-- Always read the key into a shell variable (`$API_KEY`) — never hardcode it in curl commands
-- The config file is independent of any AI Agent platform and shared across Claude Code, OpenClaw, and other tools
+- Never ask for, echo, log, or include Floeva passwords or tokens in conversation output.
+- Store authorization data only in `~/.floeva/config.json` with mode `0600`.
+- Never put access tokens in URLs, query strings, source files, or shell history.
+- Use only the verification URL returned by the Floeva API and only HTTPS Floeva domains.
+- Remove the short-lived `~/.floeva/device-authorization.json` after success or expiry.
+- Do not replace a working legacy config until web authorization succeeds and the new config is atomically stored.
