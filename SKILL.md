@@ -1,6 +1,6 @@
 ---
 name: floeva-smart-ring
-description: Connect to the Floeva health platform through secure web authorization. Use when the user wants to query smart-ring health data, list or execute Floeva health tools, get a health overview, or ask about Floeva ring setup, charging, waterproofing, warranty, FAQ, and troubleshooting. Triggers include Floeva, smart ring, Flow score, sleep, heart rate, HRV, health overview, ring data, help, FAQ, setup, and troubleshooting.
+description: Connect to the Floeva health platform through secure web authorization. Use when the user wants to query smart-ring health data, open an immersive visual health report, list or execute Floeva health tools, get a health overview, or ask about Floeva ring setup, charging, waterproofing, warranty, FAQ, and troubleshooting. Triggers include Floeva, smart ring, Flow score, sleep, heart rate, HRV, health overview, health dashboard, charts, ring data, help, FAQ, setup, and troubleshooting.
 ---
 
 # Floeva Smart Ring
@@ -16,6 +16,10 @@ Locate `scripts/floeva-auth.sh` beside this `SKILL.md`. If the platform does not
 ~/.claude/skills/floeva-smart-ring/scripts/floeva-auth.sh
 ~/.openclaw/skills/floeva-smart-ring/scripts/floeva-auth.sh
 ```
+
+The same skill directory also contains `scripts/floeva-report.py` and the
+`assets/health-report/` visual runtime. Never use a report helper or assets from
+another directory.
 
 Check credential status without printing the config or secret:
 
@@ -74,6 +78,13 @@ AUTH_MODE=$(python3 -c "import json,os; c=json.load(open(os.path.expanduser('~/.
 
 Always send `Authorization: Bearer $ACCESS_TOKEN` over HTTPS.
 
+Before presenting any successful health-data response, read
+`references/data-presentation.md` completely. Use its hierarchy, units,
+missing-data rules, and compact Markdown templates. Lead with the finding,
+not the endpoint or raw JSON. When the request is an overview or mentions a
+dashboard, chart, graph, visual, or prettier presentation, also read
+`references/health-canvas.md` completely and follow the visual workflow below.
+
 ### List capabilities
 
 ```bash
@@ -92,7 +103,36 @@ curl -sS -m 30 -w "\n%{http_code}" \
   "$BASE_URL/open/v1/health/overview"
 ```
 
-Summarize sleep, heart-rate trends, steps, and Flow score in warm, non-diagnostic language.
+Summarize sleep, heart-rate trends, steps, and available baseline context in
+warm, non-diagnostic language. For a complete overview that includes Flow, or
+whenever the user asks about Flow, also execute `get_flow_score_detail` for the
+requested date. Pass the user's IANA timezone when it is known. Do not infer a
+Flow score from the other health metrics.
+
+### Immersive visual report
+
+For a complete health overview, automatically attempt the Floeva Health Canvas
+when a local browser is available, unless the user asks for text only. Always
+use it when the user explicitly requests a dashboard, chart, graph, visual
+report, or more beautiful presentation.
+
+Prepare the private report directly from the authorized Floeva service:
+
+```bash
+python3 <skill-dir>/scripts/floeva-report.py prepare
+```
+
+This command prints one non-secret JSON object containing the random local URL,
+session id, expiry, and a compact summary. It must not print the credential or
+raw config. Start or safely reuse the localhost server exactly as specified in
+`references/health-canvas.md`, then open the returned URL for the user. Do not
+replace this Canvas with a generic chart library when the report runtime is
+available.
+
+In the conversation, lead with one useful finding and mention that the opened
+visual report is private to this device and expires in one hour. If the local
+browser or report runtime is unavailable, fall back to the compact Markdown
+view without claiming that an immersive report was created.
 
 ### Help and FAQ
 
@@ -123,6 +163,9 @@ curl -sS -m 30 -w "\n%{http_code}" -X POST \
 ```
 
 Interpret the result for the user; do not present raw health data as a medical diagnosis.
+Apply the presentation contract to specific-tool results too. Prefer a compact
+trend table or sparkline for comparable dated values, and show data coverage
+beside any interpretation that depends on sample count or days recorded.
 
 ## 4. Handle errors
 
@@ -141,4 +184,9 @@ The final line emitted by each request is the HTTP status.
 - Never put access tokens in URLs, query strings, source files, or shell history.
 - Use only the verification URL returned by the Floeva API and only HTTPS Floeva domains.
 - Remove the short-lived `~/.floeva/device-authorization.json` after success or expiry.
+- Keep visual-report data under `~/.floeva/reports` only; never upload it or
+  expose its localhost server beyond `127.0.0.1`.
+- Never include an access token, API key, config file, device code, or remote
+  API URL in a browser report. Remove the exact report session when it is no
+  longer needed; expired sessions are automatically purged.
 - Do not replace a working legacy config until web authorization succeeds and the new config is atomically stored.

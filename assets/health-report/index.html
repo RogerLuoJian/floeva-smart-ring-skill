@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Floeva Health Canvas</title>
+  <link rel="stylesheet" href="./app.css">
+</head>
+<body>
+  <div class="atmosphere atmosphere-one" aria-hidden="true"></div>
+  <div class="atmosphere atmosphere-two" aria-hidden="true"></div>
+
+  <main class="report-shell" id="health-canvas" hidden>
+    <section class="hero-panel" aria-labelledby="hero-title">
+      <header class="brand-row">
+        <div class="brand-lockup">
+          <img src="./logo-icon.svg" alt="" width="36" height="36">
+          <div>
+            <div class="brand-name">Floeva</div>
+            <div class="brand-subtitle">Health Canvas</div>
+          </div>
+        </div>
+        <div class="region-label" id="region-label">PRIVATE · LOCAL</div>
+      </header>
+
+      <div class="hero-heading">
+        <p class="eyebrow" id="date-range">BODY RHYTHM · 7 DAYS</p>
+        <h1 id="hero-title">身体节律</h1>
+        <p class="hero-caption" id="hero-caption">让最近几天的身体信号，慢慢显出自己的形状。</p>
+      </div>
+
+      <div class="rhythm-stage" aria-label="近七天身体节律地形">
+        <svg id="rhythm-landscape" viewBox="0 0 1200 680" role="img" aria-labelledby="landscape-title landscape-desc">
+          <title id="landscape-title">近七天身体节律地形</title>
+          <desc id="landscape-desc">以活动、心率与睡眠记录构成的抽象节律地形。</desc>
+          <defs>
+            <linearGradient id="terrain-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#7c3aed" stop-opacity="0.42"></stop>
+              <stop offset="0.5" stop-color="#8b5cf6" stop-opacity="0.18"></stop>
+              <stop offset="1" stop-color="#f5d9b8" stop-opacity="0"></stop>
+            </linearGradient>
+            <linearGradient id="terrain-stroke" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#6366f1"></stop>
+              <stop offset="0.48" stop-color="#8b5cf6"></stop>
+              <stop offset="1" stop-color="#ec4899"></stop>
+            </linearGradient>
+            <linearGradient id="activity-stroke" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#10b981"></stop>
+              <stop offset="1" stop-color="#3b82f6"></stop>
+            </linearGradient>
+            <filter id="soft-glow" x="-40%" y="-40%" width="180%" height="180%">
+              <feGaussianBlur stdDeviation="9" result="blur"></feGaussianBlur>
+              <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+            </filter>
+          </defs>
+          <g id="terrain-grid" aria-hidden="true"></g>
+          <g id="terrain-ridges"></g>
+          <g id="terrain-signals"></g>
+          <g id="terrain-labels"></g>
+        </svg>
+        <div class="flow-bloom" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <div class="stage-note">
+          <span class="stage-note-label">RHYTHM FIELD</span>
+          <strong id="coverage-label">正在读取</strong>
+        </div>
+      </div>
+
+      <div class="hero-metrics" aria-label="最近记录摘要">
+        <article>
+          <span>步数</span>
+          <strong id="hero-steps">—</strong>
+          <small>STEPS</small>
+        </article>
+        <article>
+          <span>睡眠</span>
+          <strong id="hero-sleep">—</strong>
+          <small>SLEEP</small>
+        </article>
+        <article>
+          <span>HRV</span>
+          <strong id="hero-hrv">—</strong>
+          <small>MS</small>
+        </article>
+      </div>
+    </section>
+
+    <aside class="insight-rail" aria-label="健康摘要与趋势">
+      <section class="rail-section today-section">
+        <div class="section-heading">
+          <span class="section-index">01</span>
+          <div>
+            <p>最新记录</p>
+            <h2 id="latest-date">身体近况</h2>
+          </div>
+          <span class="status-pill" id="data-status">已记录</span>
+        </div>
+
+        <div class="primary-reading">
+          <span class="primary-label">记录睡眠</span>
+          <strong id="primary-sleep">—</strong>
+          <span class="primary-unit">小时</span>
+        </div>
+
+        <div class="metric-grid">
+          <article>
+            <span>静息心率</span>
+            <strong id="resting-heart-rate">—</strong>
+            <small>bpm</small>
+          </article>
+          <article>
+            <span>HRV</span>
+            <strong id="latest-hrv">—</strong>
+            <small>ms</small>
+          </article>
+          <article>
+            <span>当天步数</span>
+            <strong id="latest-steps">—</strong>
+            <small>步</small>
+          </article>
+          <article>
+            <span>数据基线</span>
+            <strong id="baseline-days">—</strong>
+            <small>天</small>
+          </article>
+        </div>
+      </section>
+
+      <section class="rail-section portrait-section">
+        <div class="section-heading">
+          <span class="section-index">02</span>
+          <div>
+            <p>近七天</p>
+            <h2>节律画像</h2>
+          </div>
+          <span class="coverage-mini" id="coverage-mini">—</span>
+        </div>
+
+        <article class="portrait-card activity-card">
+          <div class="card-heading">
+            <div>
+              <span>活动轨迹</span>
+              <strong id="steps-average">—</strong>
+            </div>
+            <small>日均步数</small>
+          </div>
+          <svg id="steps-spark" viewBox="0 0 520 132" role="img" aria-label="近七天步数趋势"></svg>
+        </article>
+
+        <article class="portrait-card heart-card">
+          <div class="card-heading">
+            <div>
+              <span>心率范围</span>
+              <strong id="heart-latest">—</strong>
+            </div>
+            <small>最低–平均–最高</small>
+          </div>
+          <svg id="heart-range" viewBox="0 0 520 150" role="img" aria-label="近七天心率范围"></svg>
+        </article>
+
+        <article class="portrait-card sleep-card">
+          <div class="card-heading">
+            <div>
+              <span>睡眠结构</span>
+              <strong id="sleep-total">—</strong>
+            </div>
+            <small>最近一晚</small>
+          </div>
+          <div class="sleep-bar" aria-label="睡眠阶段比例">
+            <span class="sleep-deep" id="sleep-deep"></span>
+            <span class="sleep-rem" id="sleep-rem"></span>
+            <span class="sleep-light" id="sleep-light"></span>
+          </div>
+          <div class="sleep-legend">
+            <span><i class="deep-dot"></i>深睡 <strong id="deep-value">—</strong></span>
+            <span><i class="rem-dot"></i>REM <strong id="rem-value">—</strong></span>
+            <span><i class="light-dot"></i>浅睡 <strong id="light-value">—</strong></span>
+          </div>
+        </article>
+      </section>
+
+      <section class="rail-section reflection-section">
+        <div class="section-heading">
+          <span class="section-index">03</span>
+          <div>
+            <p>温柔观察</p>
+            <h2>和身体一起看趋势</h2>
+          </div>
+          <img src="./lotus.svg" alt="" width="28" height="28">
+        </div>
+        <div class="reflection-card">
+          <span>BODY NOTE</span>
+          <h3 id="reflection-title">数据正在形成自己的节奏</h3>
+          <p id="reflection-copy">继续佩戴并同步，身体的长期变化会更容易被看见。</p>
+        </div>
+        <p class="privacy-note">报告仅在这台设备的本地地址打开；授权令牌不会进入浏览器。</p>
+      </section>
+    </aside>
+  </main>
+
+  <div class="loading-state" id="loading-state" role="status">
+    <img src="./logo-icon.svg" alt="" width="48" height="48">
+    <strong>正在展开你的身体节律</strong>
+    <span>健康数据只在本机短暂停留</span>
+  </div>
+
+  <div class="error-state" id="error-state" hidden role="alert">
+    <img src="./lotus.svg" alt="" width="48" height="48">
+    <h1>这份报告暂时打不开</h1>
+    <p>会话可能已经过期。可以回到 Agent 重新生成一份。</p>
+  </div>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>
