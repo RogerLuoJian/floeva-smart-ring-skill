@@ -1,0 +1,5 @@
+.DS_Store
+mcp/node_modules/
+mcp/dist/
+mcp/build/
+workbuddy/dist/
