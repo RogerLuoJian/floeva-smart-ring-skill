@@ -1,0 +1,28 @@
+{
+  "runtime": {
+    "type": "python",
+    "version": "3.11"
+  },
+  "init": {
+    "darwin": "python3 scripts/floeva-auth.py init --client floeva-workbuddy-cn",
+    "linux": "python3 scripts/floeva-auth.py init --client floeva-workbuddy-cn",
+    "win32": "python scripts/floeva-auth.py init --client floeva-workbuddy-cn"
+  },
+  "auth": {
+    "darwin": "python3 scripts/floeva-auth.py auth --client floeva-workbuddy-cn --region cn",
+    "linux": "python3 scripts/floeva-auth.py auth --client floeva-workbuddy-cn --region cn",
+    "win32": "python scripts/floeva-auth.py auth --client floeva-workbuddy-cn --region cn"
+  },
+  "unAuth": {
+    "darwin": "python3 scripts/floeva-auth.py logout --client floeva-workbuddy-cn",
+    "linux": "python3 scripts/floeva-auth.py logout --client floeva-workbuddy-cn",
+    "win32": "python scripts/floeva-auth.py logout --client floeva-workbuddy-cn"
+  },
+  "status": {
+    "darwin": "python3 scripts/floeva-auth.py status --client floeva-workbuddy-cn",
+    "linux": "python3 scripts/floeva-auth.py status --client floeva-workbuddy-cn",
+    "win32": "python scripts/floeva-auth.py status --client floeva-workbuddy-cn"
+  },
+  "statusMatch": "^oauth$",
+  "authUrlDomain": "floeva.cn"
+}

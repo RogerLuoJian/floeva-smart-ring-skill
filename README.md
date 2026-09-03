@@ -81,6 +81,33 @@ Existing configs containing `api_key` and `base_url` continue to work unchanged.
 - The report uses bundled local fonts and assets; it makes no third-party web
   requests and disables caching, referrers, and framing.
 
+## WorkBuddy connector development
+
+The repository also contains the China-only WorkBuddy connector implementation:
+
+- `scripts/floeva-auth.py` supports the allowlisted `floeva-workbuddy-cn`
+  client with a stable random installation identity and isolated credential
+  store. Its managed `auth` command completes Device Flow polling, while
+  `tools`, `overview`, and `call` expose only allowlisted read-only health
+  operations as JSON.
+- `workbuddy/cn/` contains the documented Python runtime `cli.json`, reviewed
+  metadata, the Floeva icon, and the CLI-only Skill overlay.
+- `workbuddy/build_connector.py` validates the CLI contract and assembles a
+  deterministic review archive from the canonical script and Skill sources.
+
+Development checks:
+
+```bash
+python3 -m unittest discover -s tests
+python3 workbuddy/build_connector.py
+```
+
+The connector uses WorkBuddy's documented CLI + Skill structure. WorkBuddy
+provides Python 3.11, calls `init/auth/status/unAuth`, opens only the declared
+`floeva.cn` authorization domain, and matches the side-effect-free `oauth`
+status. The Skill invokes the packaged CLI through Bash and never reads or
+prints credential files.
+
 ## Uninstall
 
 ```bash
