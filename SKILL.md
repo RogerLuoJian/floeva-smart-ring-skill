@@ -1,6 +1,6 @@
 ---
 name: floeva-smart-ring
-description: Connect to the Floeva health platform through secure web authorization. Use when the user wants to query smart-ring health data, open an immersive visual health report, list or execute Floeva health tools, get a health overview, or ask about Floeva ring setup, charging, waterproofing, warranty, FAQ, and troubleshooting. Triggers include Floeva, smart ring, Flow score, sleep, heart rate, HRV, health overview, health dashboard, charts, ring data, help, FAQ, setup, and troubleshooting.
+description: Connect to the Floeva health platform through secure web authorization. Use when the user wants to query smart-ring or band health data, open an immersive visual health report, list or execute Floeva health tools, get a health overview, or ask about Floeva wearable setup, charging, waterproofing, warranty, FAQ, and troubleshooting. Triggers include Floeva, smart ring, band, wearable, wristband, 腕带, Flow score, sleep, heart rate, HRV, health overview, health dashboard, charts, ring data, help, FAQ, setup, and troubleshooting.
 ---
 
 # Floeva Smart Ring

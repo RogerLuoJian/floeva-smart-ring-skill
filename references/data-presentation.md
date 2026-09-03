@@ -4,6 +4,10 @@ Use this contract after a successful health-data request and before answering
 the user. The API response remains the source of numeric facts; this contract
 controls hierarchy, formatting, comparison, and tone.
 
+Floeva readings may come from a ring, band, or another Floeva wearable. Use
+`Floeva wearable` / `Floeva 可穿戴设备` when the device type is not explicitly
+provided. Never infer a specific hardware model from health measurements.
+
 ## 1. Build a calm information hierarchy
 
 Present only sections supported by the response, in this order:

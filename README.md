@@ -81,6 +81,30 @@ Existing configs containing `api_key` and `base_url` continue to work unchanged.
 - The report uses bundled local fonts and assets; it makes no third-party web
   requests and disables caching, referrers, and framing.
 
+## WorkBuddy connector development
+
+The repository also contains the China-only WorkBuddy connector implementation:
+
+- `scripts/floeva-auth.py` supports the allowlisted `floeva-workbuddy-cn`
+  client with a stable random installation identity and isolated credential
+  store.
+- `mcp/` contains the Node 20 stdio MCP adapter and its locked dependencies.
+- `workbuddy/cn/` contains reviewed metadata, the Floeva icon, and the MCP-only
+  Skill overlay. `workbuddy/build_connector.py` assembles a deterministic
+  review archive after the WorkBuddy configuration gates are approved.
+
+Development checks:
+
+```bash
+python3 -m unittest discover -s tests
+cd mcp && npm ci && npm test && npm run build && npm audit
+```
+
+The release builder intentionally refuses to create a zip until
+`gate-approval.json` binds exact `mcp.json` and `cli.json` hashes to official
+WorkBuddy Device Flow schema and packaged-runtime path evidence. This prevents
+shipping guessed `authDeviceFlow` fields or per-device client IDs.
+
 ## Uninstall
 
 ```bash
