@@ -120,11 +120,14 @@ def _atomic_remove_files(paths: list[Path]) -> None:
             if tombstone.exists():
                 os.replace(tombstone, original)
         raise CliError("Unable to update local Floeva authorization state.") from exc
+    cleanup_failed = False
     for _, tombstone in moved:
         try:
             tombstone.unlink()
         except OSError:
-            pass
+            cleanup_failed = True
+    if cleanup_failed:
+        raise CliError("Unable to remove local Floeva authorization state completely.")
 
 
 def _load_json(path: Path) -> dict[str, Any]:

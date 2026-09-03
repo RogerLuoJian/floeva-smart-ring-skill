@@ -105,4 +105,17 @@ describe('FloevaClient', () => {
     expect(message).not.toContain(TOKEN);
     expect(message).not.toContain(credential.clientInstanceId);
   });
+
+  it('maps malformed UTF-8 responses to a safe error', async () => {
+    const client = new FloevaClient(credential, {
+      fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(new Uint8Array([0xff]), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    });
+
+    await expect(client.getHealthOverview()).rejects.toMatchObject({ code: 'invalid_response' });
+  });
 });

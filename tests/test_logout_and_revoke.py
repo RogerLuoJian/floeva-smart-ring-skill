@@ -120,6 +120,23 @@ class LogoutAndRevokeTest(unittest.TestCase):
         self.assertFalse(self.paths["session"].exists())
         self.assertTrue(self.paths["instance"].exists())
 
+    def test_local_cleanup_reports_tombstone_deletion_failure(self) -> None:
+        self.write_authorization()
+        real_unlink = Path.unlink
+
+        def fail_tombstone_unlink(path: Path, *args: object, **kwargs: object) -> None:
+            if ".remove-" in path.name:
+                raise OSError("simulated deletion failure")
+            real_unlink(path, *args, **kwargs)
+
+        with mock.patch.object(Path, "unlink", autospec=True, side_effect=fail_tombstone_unlink):
+            result = self.run_main("cleanup-local", "--client", "floeva-workbuddy-cn")
+
+        self.assertEqual(1, result[0])
+        self.assertIn("Unable to remove local Floeva authorization state completely.", result[2])
+        self.assertNotIn(self.TOKEN, result[1] + result[2])
+        self.assertNotIn(self.INSTANCE_ID, result[1] + result[2])
+
 
 if __name__ == "__main__":
     unittest.main()

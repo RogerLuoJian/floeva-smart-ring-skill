@@ -139,5 +139,9 @@ async function readBoundedBody(response: Response, maximum: number): Promise<str
     joined.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new TextDecoder('utf-8', { fatal: true }).decode(joined);
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(joined);
+  } catch {
+    throw new SafeError('invalid_response');
+  }
 }
