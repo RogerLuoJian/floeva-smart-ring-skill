@@ -4,12 +4,10 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
 import stat
-import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -18,12 +16,45 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_ROOT = REPO_ROOT / "workbuddy" / "cn"
-MCP_ROOT = REPO_ROOT / "mcp"
-MCP_BUNDLE = MCP_ROOT / "build" / "server.mjs"
-PLATFORMS = {"darwin", "linux", "win32"}
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 SOURCE = "floeva-health-cn"
+VERSION = "0.2.0"
+MAX_ARCHIVE_ENTRY_BYTES = 1024 * 1024
 TOKEN_PATTERN = re.compile(rb"fv_sk_[A-Za-z0-9]{32}")
+EXPECTED_CLI_CONFIG = {
+    "runtime": {"type": "python", "version": "3.11"},
+    "init": {
+        "darwin": "python3 scripts/floeva-auth.py init --client floeva-workbuddy-cn",
+        "linux": "python3 scripts/floeva-auth.py init --client floeva-workbuddy-cn",
+        "win32": "python scripts/floeva-auth.py init --client floeva-workbuddy-cn",
+    },
+    "auth": {
+        "darwin": "python3 scripts/floeva-auth.py auth --client floeva-workbuddy-cn --region cn",
+        "linux": "python3 scripts/floeva-auth.py auth --client floeva-workbuddy-cn --region cn",
+        "win32": "python scripts/floeva-auth.py auth --client floeva-workbuddy-cn --region cn",
+    },
+    "unAuth": {
+        "darwin": "python3 scripts/floeva-auth.py logout --client floeva-workbuddy-cn",
+        "linux": "python3 scripts/floeva-auth.py logout --client floeva-workbuddy-cn",
+        "win32": "python scripts/floeva-auth.py logout --client floeva-workbuddy-cn",
+    },
+    "status": {
+        "darwin": "python3 scripts/floeva-auth.py status --client floeva-workbuddy-cn",
+        "linux": "python3 scripts/floeva-auth.py status --client floeva-workbuddy-cn",
+        "win32": "python scripts/floeva-auth.py status --client floeva-workbuddy-cn",
+    },
+    "statusMatch": "^oauth$",
+    "authUrlDomain": "floeva.cn",
+}
+EXPECTED_MODES = {
+    "connector-meta.json": 0o644,
+    "cli.json": 0o644,
+    "icon.svg": 0o644,
+    "scripts/floeva-auth.py": 0o755,
+    "skills/floeva-smart-ring/SKILL.md": 0o644,
+    "skills/floeva-smart-ring/references/data-presentation.md": 0o644,
+    "skills/floeva-smart-ring/scripts/floeva-auth.py": 0o755,
+}
 
 
 class PackageError(Exception):
@@ -40,107 +71,109 @@ def _load_object(path: Path) -> dict[str, Any]:
     return value
 
 
-def _digest(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+def _load_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise PackageError(f"Invalid or missing text file: {path.name}") from exc
 
 
-def _validate_gate(source_root: Path) -> tuple[Path, Path]:
-    mcp_path = source_root / "mcp.json"
-    cli_path = source_root / "cli.json"
-    gate_path = source_root / "gate-approval.json"
-    if not mcp_path.is_file() or not cli_path.is_file():
-        raise PackageError(
-            "BLOCKED WB-1/WB-2: approved cli.json Device Flow schema and packaged-runtime path rules are unavailable."
-        )
-    if not gate_path.is_file():
-        raise PackageError(
-            "BLOCKED WB-1/WB-2: gate-approval.json must bind the exact reviewed mcp.json and cli.json."
-        )
-    gate = _load_object(gate_path)
-    required_strings = ("schema_reference", "runtime_reference", "verified_at")
-    if any(not isinstance(gate.get(name), str) or not gate[name] for name in required_strings):
-        raise PackageError("WB-1/WB-2 gate evidence is incomplete.")
-    if gate.get("mcp_sha256") != _digest(mcp_path) or gate.get("cli_sha256") != _digest(cli_path):
-        raise PackageError("WB-1/WB-2 gate evidence does not match the current configs.")
-    return mcp_path, cli_path
-
-
-def _validate_configs(source_root: Path) -> tuple[Path, Path]:
-    mcp_path, cli_path = _validate_gate(source_root)
-    metadata = _load_object(source_root / "connector-meta.json")
+def _validate_contract(
+    metadata: dict[str, Any], cli: dict[str, Any], skill_text: str
+) -> None:
     if (
         metadata.get("source") != SOURCE
-        or metadata.get("type") != "mcp"
+        or metadata.get("type") != "cli"
+        or metadata.get("version") != VERSION
         or metadata.get("minWorkbuddyVersion") != "5.0.0"
     ):
         raise PackageError("Connector metadata contract is invalid.")
-    for field in ("name", "name_en", "description", "description_zh", "description_en", "version"):
+    for field in (
+        "name",
+        "name_en",
+        "description",
+        "description_zh",
+        "description_en",
+        "version",
+    ):
         if not isinstance(metadata.get(field), str) or not metadata[field]:
             raise PackageError(f"Connector metadata field is missing: {field}")
     for field in ("examples_zh", "examples_en"):
         value = metadata.get(field)
-        if not isinstance(value, list) or not 2 <= len(value) <= 5 or not all(isinstance(item, str) and item for item in value):
+        if (
+            not isinstance(value, list)
+            or not 2 <= len(value) <= 5
+            or not all(isinstance(item, str) and item for item in value)
+        ):
             raise PackageError(f"Connector metadata examples are invalid: {field}")
 
-    mcp = _load_object(mcp_path)
-    servers = mcp.get("mcpServers")
-    if mcp.get("preAuth") != "cli" or not isinstance(servers, dict) or len(servers) != 1:
-        raise PackageError("mcp.json must contain one pre-authenticated MCP server.")
-    server = next(iter(servers.values()))
-    if not isinstance(server, dict):
-        raise PackageError("mcp.json server entry is invalid.")
-    runtime = server.get("runtime")
+    if cli != EXPECTED_CLI_CONFIG:
+        raise PackageError("cli.json does not match the reviewed Python CLI contract.")
+    lines = skill_text.splitlines()
+    if len(lines) < 3 or lines[0] != "---" or "---" not in lines[1:]:
+        raise PackageError("WorkBuddy Skill frontmatter is invalid.")
+    end = lines[1:].index("---") + 1
+    frontmatter: dict[str, str] = {}
+    for line in lines[1:end]:
+        if ":" not in line:
+            raise PackageError("WorkBuddy Skill frontmatter is invalid.")
+        key, value = line.split(":", 1)
+        frontmatter[key.strip()] = value.strip()
+    required = {
+        "name",
+        "display_name",
+        "display_name_en",
+        "description",
+        "description_zh",
+        "description_en",
+        "allowed-tools",
+        "version",
+        "author",
+    }
+    if set(frontmatter) != required or any(not frontmatter[key] for key in required):
+        raise PackageError("WorkBuddy Skill frontmatter fields are incomplete.")
     if (
-        server.get("type") != "stdio"
-        or server.get("command") != "node"
-        or server.get("timeout") != 30000
-        or runtime != {"type": "node", "version": "20"}
-        or "headers" in server
-        or "env" in server
-        or "staticHeaders" in server
-        or "staticEnv" in server
+        frontmatter["name"] != "floeva-smart-ring"
+        or frontmatter["allowed-tools"] != "Bash"
+        or frontmatter["version"] != VERSION
+        or frontmatter["author"] != "Floeva"
     ):
-        raise PackageError("mcp.json violates the local Node 20 stdio contract.")
-    args = server.get("args")
-    if not isinstance(args, list) or len(args) != 1 or not _safe_relative_path(args[0], ".mjs"):
-        raise PackageError("mcp.json must launch one packaged relative .mjs entrypoint.")
-
-    cli = _load_object(cli_path)
-    runtime = cli.get("runtime")
-    if not isinstance(runtime, dict) or runtime.get("type") != "python":
-        raise PackageError("cli.json must declare the WorkBuddy Python runtime.")
-    if cli.get("authUrlDomain") != "floeva.cn" or "authDeviceFlow" not in cli:
-        raise PackageError("cli.json is missing the approved Floeva Device Flow contract.")
-    if cli.get("statusMatch") != "^oauth$":
-        raise PackageError("cli.json statusMatch must match only the stable oauth state.")
-    for action in ("init", "auth", "status", "unAuth"):
-        commands = cli.get(action)
-        if not isinstance(commands, dict) or set(commands) != PLATFORMS:
-            raise PackageError(f"cli.json {action} commands must cover darwin/linux/win32.")
-        for command in commands.values():
-            if not isinstance(command, str) or "floeva-auth.py" not in command or "floeva-workbuddy-cn" not in command:
-                raise PackageError(f"cli.json {action} command is not bound to the Floeva WorkBuddy client.")
-    return mcp_path, cli_path
+        raise PackageError("WorkBuddy Skill frontmatter contract is invalid.")
+    forbidden = (
+        "authorization:",
+        "/open/v1",
+        "access_token=$(",
+        "config.json",
+        "curl ",
+        "mcp",
+    )
+    lowered = skill_text.lower()
+    if any(value in lowered for value in forbidden):
+        raise PackageError("WorkBuddy Skill bypasses the reviewed CLI boundary.")
+    for command in (" overview ", " tools ", " call "):
+        if command not in skill_text:
+            raise PackageError("WorkBuddy Skill is missing a required CLI query command.")
 
 
-def _safe_relative_path(value: Any, suffix: str) -> bool:
-    if not isinstance(value, str) or not value.endswith(suffix) or "\\" in value:
-        return False
-    path = Path(value)
-    return not path.is_absolute() and ".." not in path.parts and len(path.parts) > 1
+def _validate_configs(source_root: Path) -> Path:
+    cli_path = source_root / "cli.json"
+    _validate_contract(
+        _load_object(source_root / "connector-meta.json"),
+        _load_object(cli_path),
+        _load_text(source_root / "skill-overlay.md"),
+    )
+    return cli_path
 
 
-def _source_entries(
-    source_root: Path, mcp_path: Path, cli_path: Path, bundle_path: Path
-) -> list[tuple[str, Path, int]]:
+def _source_entries(source_root: Path, cli_path: Path) -> list[tuple[str, Path, int]]:
+    auth_script = REPO_ROOT / "scripts" / "floeva-auth.py"
     entries = [
         ("connector-meta.json", source_root / "connector-meta.json", 0o644),
-        ("mcp.json", mcp_path, 0o644),
         ("cli.json", cli_path, 0o644),
         ("icon.svg", source_root / "icon.svg", 0o644),
-        ("runtime/server.mjs", bundle_path, 0o644),
-        ("scripts/floeva-auth.py", REPO_ROOT / "scripts" / "floeva-auth.py", 0o755),
+        ("scripts/floeva-auth.py", auth_script, 0o755),
         ("skills/floeva-smart-ring/SKILL.md", source_root / "skill-overlay.md", 0o644),
+        ("skills/floeva-smart-ring/scripts/floeva-auth.py", auth_script, 0o755),
         (
             "skills/floeva-smart-ring/references/data-presentation.md",
             REPO_ROOT / "references" / "data-presentation.md",
@@ -163,21 +196,9 @@ def _scan_entry(name: str, content: bytes) -> None:
 def build_connector(
     output: Path,
     source_root: Path = SOURCE_ROOT,
-    bundle_path: Path = MCP_BUNDLE,
-    run_mcp_build: bool = True,
-) -> str:
-    mcp_path, cli_path = _validate_configs(source_root)
-    if run_mcp_build:
-        result = subprocess.run(
-            ["npm", "run", "build"],
-            cwd=MCP_ROOT,
-            check=False,
-            text=True,
-            capture_output=True,
-        )
-        if result.returncode != 0:
-            raise PackageError("MCP build failed; run npm ci and npm run build.")
-    entries = _source_entries(source_root, mcp_path, cli_path, bundle_path)
+) -> None:
+    cli_path = _validate_configs(source_root)
+    entries = _source_entries(source_root, cli_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(output.suffix + ".tmp")
     try:
@@ -193,29 +214,39 @@ def build_connector(
     finally:
         temporary.unlink(missing_ok=True)
     validate_archive(output)
-    return _digest(output)
 
 
 def validate_archive(path: Path) -> None:
-    expected = {
-        "connector-meta.json",
-        "mcp.json",
-        "cli.json",
-        "icon.svg",
-        "runtime/server.mjs",
-        "scripts/floeva-auth.py",
-        "skills/floeva-smart-ring/SKILL.md",
-        "skills/floeva-smart-ring/references/data-presentation.md",
-    }
+    expected = set(EXPECTED_MODES)
     try:
         with zipfile.ZipFile(path) as archive:
             names = archive.namelist()
-            if set(names) != expected or names != sorted(names):
+            if len(names) != len(expected) or set(names) != expected or names != sorted(names):
                 raise PackageError("Connector archive entries are incomplete or non-deterministic.")
             for info in archive.infolist():
-                if info.is_dir() or info.date_time != ZIP_TIMESTAMP:
+                mode = info.external_attr >> 16
+                if (
+                    info.is_dir()
+                    or info.date_time != ZIP_TIMESTAMP
+                    or not stat.S_ISREG(mode)
+                    or stat.S_IMODE(mode) != EXPECTED_MODES[info.filename]
+                    or info.file_size > MAX_ARCHIVE_ENTRY_BYTES
+                ):
                     raise PackageError("Connector archive metadata is non-deterministic.")
                 _scan_entry(info.filename, archive.read(info))
+            root_script = archive.read("scripts/floeva-auth.py")
+            skill_script = archive.read("skills/floeva-smart-ring/scripts/floeva-auth.py")
+            if root_script != skill_script:
+                raise PackageError("Packaged CLI script copies do not match.")
+            try:
+                metadata = json.loads(archive.read("connector-meta.json").decode("utf-8"))
+                cli = json.loads(archive.read("cli.json").decode("utf-8"))
+                skill_text = archive.read("skills/floeva-smart-ring/SKILL.md").decode("utf-8")
+            except (UnicodeDecodeError, ValueError) as exc:
+                raise PackageError("Connector archive configuration is unreadable.") from exc
+            if not isinstance(metadata, dict) or not isinstance(cli, dict):
+                raise PackageError("Connector archive configuration is invalid.")
+            _validate_contract(metadata, cli, skill_text)
     except (OSError, zipfile.BadZipFile) as exc:
         raise PackageError("Connector archive is unreadable.") from exc
 
@@ -225,7 +256,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "--output",
         type=Path,
-        default=REPO_ROOT / "workbuddy" / "dist" / f"{SOURCE}-0.1.0.zip",
+        default=REPO_ROOT / "workbuddy" / "dist" / f"{SOURCE}-{VERSION}.zip",
     )
     parser.add_argument("--validate", type=Path)
     args = parser.parse_args(argv)
@@ -234,8 +265,8 @@ def main(argv: list[str]) -> int:
             validate_archive(args.validate)
             print("valid")
         else:
-            digest = build_connector(args.output)
-            print(f"built {args.output.name} sha256={digest}")
+            build_connector(args.output)
+            print(f"built {args.output.name}")
         return 0
     except PackageError as exc:
         print(str(exc), file=sys.stderr)

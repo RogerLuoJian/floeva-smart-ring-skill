@@ -151,6 +151,17 @@ class WorkBuddyAuthorizationModeTest(unittest.TestCase):
             result, _, _ = self.run_main("start", "cn")
         self.assertEqual(0, result)
 
+    def test_workbuddy_rejects_unbounded_polling_contract(self) -> None:
+        response = self.device_response()
+        response["interval"] = AUTH.MAX_POLL_INTERVAL_SECONDS + 1
+        with mock.patch.object(AUTH, "_request_json", return_value=(200, response)):
+            result, _, stderr = self.run_main(
+                "start", "--client", "floeva-workbuddy-cn", "--region", "cn"
+            )
+
+        self.assertEqual(1, result)
+        self.assertIn("invalid authorization polling contract", stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

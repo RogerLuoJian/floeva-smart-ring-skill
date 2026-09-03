@@ -25,7 +25,28 @@ CLIENT_ID = LEGACY_CLIENT_ID
 SCOPE = "health:read"
 USER_AGENT = "Floeva-Smart-Ring-Skill/1.0"
 EXPIRY_SKEW_SECONDS = 60
+MAX_API_RESPONSE_BYTES = 1024 * 1024
+MAX_ARGUMENTS_BYTES = 16 * 1024
+MAX_DEVICE_FLOW_SECONDS = 15 * 60
+MAX_POLL_INTERVAL_SECONDS = 60
 CLIENT_INSTANCE_PATTERN = re.compile(r"[A-Za-z0-9_-]{16,128}\Z")
+TOOL_NAME_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
+WORKBUDDY_ALLOWED_TOOLS = frozenset(
+    {
+        "get_blood_oxygen_data",
+        "get_daily_health_summary",
+        "get_flow_score_detail",
+        "get_heart_rate_data",
+        "get_help",
+        "get_hrv_data",
+        "get_pressure_data",
+        "get_sleep_data",
+        "get_steps_data",
+        "get_temperature_data",
+        "get_user_baseline",
+        "get_workout_data",
+    }
+)
 REGIONS = {
     "global": {
         "base_url": "https://us.getfloeva.com/ring/api",
@@ -168,13 +189,15 @@ def _request_json(
     try:
         with opener.open(request, timeout=30) as response:
             status = response.status
-            body = response.read()
+            body = response.read(MAX_API_RESPONSE_BYTES + 1)
     except urllib.error.HTTPError as exc:
         status = exc.code
-        body = exc.read()
-    except urllib.error.URLError as exc:
+        body = exc.read(MAX_API_RESPONSE_BYTES + 1)
+    except (urllib.error.URLError, TimeoutError) as exc:
         raise CliError("Unable to reach the Floeva authorization service.") from exc
 
+    if len(body) > MAX_API_RESPONSE_BYTES:
+        raise CliError("Floeva returned an unreadable authorization response.")
     if status not in {200, 400, 401}:
         raise CliError(f"Floeva authorization service returned HTTP {status}.")
     try:
@@ -184,6 +207,58 @@ def _request_json(
     if not isinstance(decoded, dict):
         raise CliError("Floeva returned an invalid authorization response.")
     return status, decoded
+
+
+def _request_open_api_json(
+    credential: dict[str, Any],
+    path: str,
+    payload: dict[str, Any] | None = None,
+) -> Any:
+    if path not in {
+        "/open/v1/tool/list",
+        "/open/v1/tool/execute",
+        "/open/v1/health/overview",
+    }:
+        raise CliError("Unsupported Floeva operation.")
+    method = "POST" if payload is not None else "GET"
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {credential['access_token']}",
+        "User-Agent": USER_AGENT,
+    }
+    data = None
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    request = urllib.request.Request(
+        f"{credential['base_url']}{path}", data=data, headers=headers, method=method
+    )
+    opener = urllib.request.build_opener(_NoRedirectHandler())
+    try:
+        with opener.open(request, timeout=30) as response:
+            status = response.status
+            body = response.read(MAX_API_RESPONSE_BYTES + 1)
+    except urllib.error.HTTPError as exc:
+        status = exc.code
+        body = exc.read(MAX_API_RESPONSE_BYTES + 1)
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise CliError("Floeva service is temporarily unavailable.") from exc
+
+    if status == 401:
+        raise CliError("Floeva authorization is missing or expired.", exit_code=4)
+    if status == 429:
+        raise CliError("Floeva request limit reached. Try again later.", exit_code=5)
+    if status >= 500:
+        raise CliError("Floeva service is temporarily unavailable.")
+    if status != 200 or len(body) > MAX_API_RESPONSE_BYTES:
+        raise CliError("Floeva returned an invalid response.")
+    try:
+        decoded = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise CliError("Floeva returned an invalid response.") from exc
+    if not isinstance(decoded, dict) or decoded.get("code") != 200 or "data" not in decoded:
+        raise CliError("Floeva returned an invalid response.")
+    return decoded["data"]
 
 
 def _positive_int(value: Any, field: str) -> int:
@@ -335,6 +410,8 @@ def _start_authorization(profile: dict[str, Any], region: str) -> None:
         raise CliError("Floeva returned an incomplete authorization response.")
     expires_in = _positive_int(response.get("expires_in"), "expires_in")
     interval = _positive_int(response.get("interval", 5), "interval")
+    if expires_in > MAX_DEVICE_FLOW_SECONDS or interval > MAX_POLL_INTERVAL_SECONDS:
+        raise CliError("Floeva returned an invalid authorization polling contract.")
     _validate_verification_url(verification_uri, region, profile=profile)
     if verification_complete is not None:
         if not isinstance(verification_complete, str) or not verification_complete:
@@ -357,7 +434,7 @@ def _start_authorization(profile: dict[str, Any], region: str) -> None:
         session["client_instance_id"] = identity["client_instance_id"]
     _atomic_write_json(session_path, session)
     if profile["dedicated_store"]:
-        print(verification_url)
+        print(verification_url, flush=True)
     else:
         print("Open this Floeva URL to authorize the Agent:")
         print(verification_url)
@@ -396,6 +473,8 @@ def _load_session_for(
                 raise CliError("The pending Floeva authorization belongs to another installation.")
         session["expires_at"] = _positive_int(session.get("expires_at"), "expires_at")
         session["interval"] = _positive_int(session.get("interval"), "interval")
+        if session["interval"] > MAX_POLL_INTERVAL_SECONDS:
+            raise CliError("The pending Floeva authorization has an invalid interval.")
         session["last_poll_at"] = int(session.get("last_poll_at", 0))
         return session
     except (CliError, TypeError, ValueError):
@@ -433,7 +512,9 @@ def _complete_authorization(profile: dict[str, Any]) -> None:
     if status == 400 and oauth_error in {"authorization_pending", "slow_down"}:
         session["last_poll_at"] = now
         if oauth_error == "slow_down":
-            session["interval"] += 5
+            session["interval"] = min(
+                session["interval"] + 5, MAX_POLL_INTERVAL_SECONDS
+            )
         _atomic_write_json(session_path, session)
         raise CliError("Floeva authorization is still pending.", exit_code=2)
     if status != 200:
@@ -471,6 +552,31 @@ def _complete_authorization(profile: dict[str, Any]) -> None:
 
 def complete_authorization() -> None:
     _complete_authorization(_require_client_profile(LEGACY_CLIENT_ID))
+
+
+def authorize_client(profile: dict[str, Any], region: str) -> None:
+    """Run Device Flow to completion for WorkBuddy's single auth command."""
+    if not profile["dedicated_store"]:
+        raise CliError("Managed authorization is only available for connector clients.")
+    _start_authorization(profile, region)
+    paths = _client_paths(profile)
+    session_path = paths["session"]
+    assert isinstance(session_path, Path)
+    while True:
+        session = _load_session_for(profile, paths)
+        now = int(time.time())
+        if now >= session["expires_at"]:
+            session_path.unlink(missing_ok=True)
+            raise CliError("The Floeva authorization code expired. Connect again.")
+        wait_seconds = max(0, session["last_poll_at"] + session["interval"] - now)
+        if wait_seconds:
+            time.sleep(wait_seconds)
+        try:
+            _complete_authorization(profile)
+            return
+        except CliError as exc:
+            if exc.exit_code != 2:
+                raise
 
 
 def _credential_contract_is_valid(
@@ -519,7 +625,11 @@ def _credential_status(profile: dict[str, Any], read_only: bool) -> None:
             raise CliError("", exit_code=3)
         print("oauth")
         return
-    if not profile["requires_instance"] and isinstance(config.get("api_key"), str) and config["api_key"]:
+    if (
+        not profile["requires_instance"]
+        and isinstance(config.get("api_key"), str)
+        and config["api_key"]
+    ):
         print("legacy")
         return
     has_token = isinstance(config.get("access_token"), str)
@@ -543,6 +653,93 @@ def _load_workbuddy_credential(
     if not _credential_contract_is_valid(credential, profile, identity):
         raise CliError("Floeva authorization state does not match this installation.")
     return credential
+
+
+def _require_workbuddy_credential(profile: dict[str, Any]) -> dict[str, Any]:
+    if not profile["requires_instance"]:
+        raise CliError("This command is only available for managed connector clients.")
+    identity = _load_installation_identity(profile)
+    credential = _load_workbuddy_credential(profile, identity)
+    if credential is None:
+        raise CliError("Floeva authorization is missing or expired.", exit_code=4)
+    try:
+        expires_at = int(credential.get("expires_at"))
+    except (TypeError, ValueError) as exc:
+        raise CliError("Floeva authorization state is invalid.") from exc
+    if int(time.time()) >= expires_at - EXPIRY_SKEW_SECONDS:
+        raise CliError("Floeva authorization is missing or expired.", exit_code=4)
+    return credential
+
+
+def _allowed_tool_definitions(credential: dict[str, Any]) -> list[dict[str, Any]]:
+    data = _request_open_api_json(credential, "/open/v1/tool/list")
+    if not isinstance(data, dict) or not isinstance(data.get("tools"), list):
+        raise CliError("Floeva returned an invalid tool list.")
+    allowed: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for definition in data["tools"]:
+        if not isinstance(definition, dict) or definition.get("type") != "function":
+            raise CliError("Floeva returned an invalid tool list.")
+        function = definition.get("function")
+        if not isinstance(function, dict):
+            raise CliError("Floeva returned an invalid tool list.")
+        name = function.get("name")
+        if (
+            not isinstance(name, str)
+            or not TOOL_NAME_PATTERN.fullmatch(name)
+            or name not in WORKBUDDY_ALLOWED_TOOLS
+        ):
+            continue
+        if name in seen:
+            raise CliError("Floeva returned an invalid tool list.")
+        seen.add(name)
+        allowed.append(definition)
+    return allowed
+
+
+def list_workbuddy_tools(profile: dict[str, Any]) -> None:
+    credential = _require_workbuddy_credential(profile)
+    print(
+        json.dumps(
+            {"tools": _allowed_tool_definitions(credential)},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    )
+
+
+def workbuddy_health_overview(profile: dict[str, Any]) -> None:
+    credential = _require_workbuddy_credential(profile)
+    result = _request_open_api_json(credential, "/open/v1/health/overview")
+    print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+
+
+def call_workbuddy_tool(profile: dict[str, Any], tool_name: str, raw_arguments: str) -> None:
+    if (
+        not TOOL_NAME_PATTERN.fullmatch(tool_name)
+        or tool_name not in WORKBUDDY_ALLOWED_TOOLS
+    ):
+        raise CliError("Unsupported Floeva tool.")
+    if len(raw_arguments.encode("utf-8")) > MAX_ARGUMENTS_BYTES:
+        raise CliError("Floeva tool arguments are too large.")
+    try:
+        arguments = json.loads(raw_arguments)
+    except (TypeError, ValueError) as exc:
+        raise CliError("Floeva tool arguments must be a JSON object.") from exc
+    if not isinstance(arguments, dict):
+        raise CliError("Floeva tool arguments must be a JSON object.")
+    credential = _require_workbuddy_credential(profile)
+    available_names = {
+        definition["function"]["name"] for definition in _allowed_tool_definitions(credential)
+    }
+    if tool_name not in available_names:
+        raise CliError("The requested Floeva tool is not available.")
+    result = _request_open_api_json(
+        credential,
+        "/open/v1/tool/execute",
+        {"toolName": tool_name, "arguments": arguments},
+    )
+    print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
 
 
 def logout_client(profile: dict[str, Any], local_only: bool = False) -> None:
@@ -616,6 +813,9 @@ def main(argv: list[str]) -> int:
             options = _parse_named_options(args, {"--client", "--region"})
             profile = _profile_from_options(options)
             _start_authorization(profile, options.get("--region", ""))
+        elif command == "auth":
+            options = _parse_named_options(args, {"--client", "--region"})
+            authorize_client(_profile_from_options(options), options.get("--region", ""))
         elif command == "complete":
             options = _parse_named_options(args, {"--client"})
             _complete_authorization(_profile_from_options(options))
@@ -635,9 +835,22 @@ def main(argv: list[str]) -> int:
         elif command == "purge":
             options = _parse_named_options(args, {"--client"})
             purge_client(_profile_from_options(options))
+        elif command == "tools":
+            options = _parse_named_options(args, {"--client"})
+            list_workbuddy_tools(_profile_from_options(options))
+        elif command == "overview":
+            options = _parse_named_options(args, {"--client"})
+            workbuddy_health_overview(_profile_from_options(options))
+        elif command == "call":
+            options = _parse_named_options(args, {"--client", "--tool", "--arguments"})
+            if "--tool" not in options or "--arguments" not in options:
+                raise CliError("Floeva call requires --tool and --arguments.")
+            call_workbuddy_tool(
+                _profile_from_options(options), options["--tool"], options["--arguments"]
+            )
         else:
             raise CliError(
-                "Usage: floeva-auth.py <status|start|complete|init|logout|cleanup-local|purge>"
+                "Usage: floeva-auth.py <init|auth|status|logout|tools|overview|call>"
             )
         return 0
     except CliError as exc:

@@ -87,23 +87,26 @@ The repository also contains the China-only WorkBuddy connector implementation:
 
 - `scripts/floeva-auth.py` supports the allowlisted `floeva-workbuddy-cn`
   client with a stable random installation identity and isolated credential
-  store.
-- `mcp/` contains the Node 20 stdio MCP adapter and its locked dependencies.
-- `workbuddy/cn/` contains reviewed metadata, the Floeva icon, and the MCP-only
-  Skill overlay. `workbuddy/build_connector.py` assembles a deterministic
-  review archive after the WorkBuddy configuration gates are approved.
+  store. Its managed `auth` command completes Device Flow polling, while
+  `tools`, `overview`, and `call` expose only allowlisted read-only health
+  operations as JSON.
+- `workbuddy/cn/` contains the documented Python runtime `cli.json`, reviewed
+  metadata, the Floeva icon, and the CLI-only Skill overlay.
+- `workbuddy/build_connector.py` validates the CLI contract and assembles a
+  deterministic review archive from the canonical script and Skill sources.
 
 Development checks:
 
 ```bash
 python3 -m unittest discover -s tests
-cd mcp && npm ci && npm test && npm run build && npm audit
+python3 workbuddy/build_connector.py
 ```
 
-The release builder intentionally refuses to create a zip until
-`gate-approval.json` binds exact `mcp.json` and `cli.json` hashes to official
-WorkBuddy Device Flow schema and packaged-runtime path evidence. This prevents
-shipping guessed `authDeviceFlow` fields or per-device client IDs.
+The connector uses WorkBuddy's documented CLI + Skill structure. WorkBuddy
+provides Python 3.11, calls `init/auth/status/unAuth`, opens only the declared
+`floeva.cn` authorization domain, and matches the side-effect-free `oauth`
+status. The Skill invokes the packaged CLI through Bash and never reads or
+prints credential files.
 
 ## Uninstall
 

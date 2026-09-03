@@ -1,5 +1,3 @@
 .DS_Store
-mcp/node_modules/
-mcp/dist/
-mcp/build/
+__pycache__/
 workbuddy/dist/
