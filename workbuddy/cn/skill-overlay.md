@@ -1,16 +1,16 @@
 ---
 name: floeva-smart-ring
-display_name: Floeva 健康
-display_name_en: Floeva Health
+display_name: Floeva
+display_name_en: Floeva
 description: Query authorized Floeva ring, band, and wearable health data through the packaged Floeva CLI. Use for health overviews, Flow, sleep, heart rate, HRV, activity, product help, dashboards, charts, and troubleshooting.
 description_zh: 通过 Floeva CLI 查询已授权的戒指、腕带和可穿戴健康数据、Flow、趋势与产品帮助。
 description_en: Query authorized Floeva ring, band, and wearable health data, Flow, trends, and product help through the packaged CLI.
 allowed-tools: Bash
-version: 0.2.0
+version: 0.2.1
 author: Floeva
 ---
 
-# Floeva Health
+# Floeva
 
 Use only the packaged `scripts/floeva-auth.py` CLI through Bash. The CLI owns authentication, reads its private credential store, restricts Floeva hosts and operations, and emits business JSON. Never read local credential files, construct HTTP requests, or ask the user to paste a password or token. If authorization is missing or expired, ask the user to reconnect the Floeva connector in WorkBuddy.
 

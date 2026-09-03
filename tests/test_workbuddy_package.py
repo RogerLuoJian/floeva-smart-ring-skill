@@ -43,10 +43,21 @@ class WorkBuddyPackageTest(unittest.TestCase):
                 self.assertEqual(sorted(archive.namelist()), archive.namelist())
                 self.assertFalse(any(".DS_Store" in name for name in archive.namelist()))
                 self.assertNotIn("mcp.json", archive.namelist())
+                metadata = json.loads(
+                    archive.read("connector-meta.json").decode("utf-8")
+                )
+                self.assertEqual("Floeva", metadata["name"])
+                self.assertEqual("Floeva", metadata["name_zh"])
+                self.assertEqual("Floeva", metadata["name_en"])
+                icon = archive.read("icon.svg").decode("utf-8")
+                self.assertIn('fill="#000000"', icon)
+                self.assertNotIn("#7C3AED", icon)
                 skill = archive.read("skills/floeva-smart-ring/SKILL.md").decode("utf-8")
                 self.assertNotIn("Authorization:", skill)
                 self.assertNotIn("/open/v1", skill)
                 self.assertIn("allowed-tools: Bash", skill)
+                self.assertIn("display_name: Floeva", skill)
+                self.assertIn("display_name_en: Floeva", skill)
                 self.assertEqual(
                     archive.read("scripts/floeva-auth.py"),
                     archive.read("skills/floeva-smart-ring/scripts/floeva-auth.py"),

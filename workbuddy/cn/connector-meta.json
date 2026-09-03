@@ -1,16 +1,16 @@
 {
-  "name": "Floeva Health",
-  "name_zh": "Floeva 健康",
-  "name_en": "Floeva Health",
+  "name": "Floeva",
+  "name_zh": "Floeva",
+  "name_en": "Floeva",
   "description": "只读查询已授权的 Floeva 可穿戴健康数据、趋势、Flow 与产品帮助。",
   "description_zh": "只读查询已授权的 Floeva 可穿戴健康数据、趋势、Flow 与产品帮助。",
   "description_en": "Read authorized Floeva wearable health data, trends, Flow, and product help.",
   "source": "floeva-health-cn",
   "type": "cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "minWorkbuddyVersion": "5.0.0",
   "examples_zh": [
-    "查看我的 Floeva 健康概览和数据覆盖度",
+    "查看我的 Floeva 数据概览和覆盖度",
     "分析我最近 7 天的睡眠和心率趋势",
     "查看今天的 Flow 分数及其节律依据"
   ],
