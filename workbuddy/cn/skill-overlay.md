@@ -6,7 +6,7 @@ description: Query authorized Floeva ring, band, and wearable health data throug
 description_zh: 通过 Floeva CLI 查询已授权的戒指、腕带和可穿戴健康数据、Flow、趋势与产品帮助。
 description_en: Query authorized Floeva ring, band, and wearable health data, Flow, trends, and product help through the packaged CLI.
 allowed-tools: Bash
-version: 0.2.1
+version: 0.2.2
 author: Floeva
 ---
 

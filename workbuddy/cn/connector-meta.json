@@ -7,7 +7,7 @@
   "description_en": "Read authorized Floeva wearable health data, trends, Flow, and product help.",
   "source": "floeva-health-cn",
   "type": "cli",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "minWorkbuddyVersion": "5.0.0",
   "examples_zh": [
     "查看我的 Floeva 数据概览和覆盖度",
