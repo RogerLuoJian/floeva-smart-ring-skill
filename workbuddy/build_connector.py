@@ -18,11 +18,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_ROOT = REPO_ROOT / "workbuddy" / "cn"
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 SOURCE = "floeva-health-cn"
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 MAX_ARCHIVE_ENTRY_BYTES = 1024 * 1024
 TOKEN_PATTERN = re.compile(rb"fv_sk_[A-Za-z0-9]{32}")
 EXPECTED_CLI_CONFIG = {
-    "runtime": {"type": "python", "version": "3.11"},
+    "runtime": {"type": "python", "version": "3.13"},
     "init": {
         "darwin": "python3 scripts/floeva-auth.py init --client floeva-workbuddy-cn",
         "linux": "python3 scripts/floeva-auth.py init --client floeva-workbuddy-cn",

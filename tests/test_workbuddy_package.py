@@ -69,7 +69,7 @@ class WorkBuddyPackageTest(unittest.TestCase):
             source = self.fixture_source(root)
             cli = json.loads((source / "cli.json").read_text(encoding="utf-8"))
 
-            self.assertEqual({"type": "python", "version": "3.11"}, cli["runtime"])
+            self.assertEqual({"type": "python", "version": "3.13"}, cli["runtime"])
             self.assertEqual("floeva.cn", cli["authUrlDomain"])
             self.assertEqual("^oauth$", cli["statusMatch"])
             self.assertEqual({"darwin", "linux", "win32"}, set(cli["auth"]))

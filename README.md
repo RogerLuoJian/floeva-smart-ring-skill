@@ -103,10 +103,22 @@ python3 workbuddy/build_connector.py
 ```
 
 The connector uses WorkBuddy's documented CLI + Skill structure. WorkBuddy
-provides Python 3.11, calls `init/auth/status/unAuth`, opens only the declared
+provides Python 3.13, calls `init/auth/status/unAuth`, opens only the declared
 `floeva.cn` authorization domain, and matches the side-effect-free `oauth`
 status. The Skill invokes the packaged CLI through Bash and never reads or
 prints credential files.
+
+Connector 0.2.2 declares the Python 3.13 minor version to match the managed
+Python 3.13.14 environment used in Windows review. The previous `3.11`
+declaration was rejected before the CLI started because it did not match that
+environment. This is a runtime version selection, not a minimum-version range.
+Keep the runtime declaration, builder contract, and package test in sync.
+
+To build the replacement review archive, run `python3 workbuddy/build_connector.py`
+(`python` on Windows). Upload `workbuddy/dist/floeva-health-cn-0.2.2.zip` and
+verify connection, authorization, a health query, restart, and disconnection in
+WorkBuddy before resubmitting. A package validation alone does not verify those
+interactive steps.
 
 ## Uninstall
 
