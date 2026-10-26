@@ -19,13 +19,23 @@ and warm language. It must stay non-diagnostic.
 Locate `scripts/floeva-report.py` beside `SKILL.md`, using the same installed
 directory resolution as the authorization helper.
 
-1. Confirm authorization with `floeva-auth.sh status`.
+1. Confirm authorization in the matching scope. Existing legacy installations
+   use `floeva-auth.sh status`; a declared Agent uses the same explicit product
+   name on both commands and must not fall back to the legacy scope:
+
+   ```bash
+   bash <skill-dir>/scripts/floeva-auth.sh status --agent-name 'Codex'
+   ```
+
 2. Prepare a report. The helper fetches the official overview itself so the
    credential never has to appear in an Agent command:
 
    ```bash
-   python3 <skill-dir>/scripts/floeva-report.py prepare
+   python3 <skill-dir>/scripts/floeva-report.py prepare --agent-name 'Codex'
    ```
+
+   Existing legacy installations keep the original no-flag `status` and
+   `prepare` commands.
 
 3. Parse the single JSON line. It contains only a local `url`, opaque
    `session`, expiry, and non-secret summary. Do not alter or guess the URL.

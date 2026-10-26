@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import secrets
@@ -31,6 +32,11 @@ MAX_DEVICE_FLOW_SECONDS = 15 * 60
 MAX_POLL_INTERVAL_SECONDS = 60
 CLIENT_INSTANCE_PATTERN = re.compile(r"[A-Za-z0-9_-]{16,128}\Z")
 TOOL_NAME_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
+MAX_AGENT_NAME_LENGTH = 64
+# Unicode bidi controls can make a displayed source differ from its stored value.
+_BIDI_CONTROL_CODEPOINTS = frozenset(
+    (0x061C, *range(0x200E, 0x2010), *range(0x202A, 0x202F), *range(0x2066, 0x206A))
+)
 WORKBUDDY_ALLOWED_TOOLS = frozenset(
     {
         "get_blood_oxygen_data",
@@ -75,6 +81,10 @@ CLIENT_PROFILES: dict[str, dict[str, Any]] = {
         "verification_hosts": {"cn": REGIONS["cn"]["verification_host"]},
         "requires_instance": True,
         "dedicated_store": True,
+        "tool_allowlist": WORKBUDDY_ALLOWED_TOOLS,
+        # Source attribution only; this must not alter WorkBuddy's authorization identity.
+        "agent_name": "WorkBuddy",
+        "bind_agent_name": False,
     },
 }
 HOME_DIR = Path.home()
@@ -280,6 +290,42 @@ def _require_client_profile(client_id: str) -> dict[str, Any]:
     return profile
 
 
+def _validate_agent_name(value: str) -> str:
+    """Accept a human-declared product name, never an inferred environment label."""
+    normalized = value.strip()
+    if (
+        not normalized
+        or len(normalized) > MAX_AGENT_NAME_LENGTH
+        or any(
+            not char.isprintable()
+            or ord(char) in _BIDI_CONTROL_CODEPOINTS
+            for char in normalized
+        )
+    ):
+        raise CliError("Agent name must be 1-64 printable characters without control characters.")
+    return normalized
+
+
+def _agent_profile(agent_name: str) -> dict[str, Any]:
+    """A managed view of the public client, isolated by a declared agent product."""
+    name = _validate_agent_name(agent_name)
+    storage_key = hashlib.sha256(name.encode("utf-8")).hexdigest()
+    return {
+        "client_id": LEGACY_CLIENT_ID,
+        "regions": ("global", "cn"),
+        "base_urls": {name: value["base_url"] for name, value in REGIONS.items()},
+        "verification_hosts": {
+            name: value["verification_host"] for name, value in REGIONS.items()
+        },
+        "requires_instance": True,
+        "dedicated_store": True,
+        "agent_name": name,
+        "bind_agent_name": True,
+        "storage_key": storage_key,
+        "tool_allowlist": None,
+    }
+
+
 def _client_paths(profile: dict[str, Any]) -> dict[str, Path | None]:
     if not profile["dedicated_store"]:
         return {
@@ -288,7 +334,12 @@ def _client_paths(profile: dict[str, Any]) -> dict[str, Path | None]:
             "credential": CONFIG_FILE,
             "session": SESSION_FILE,
         }
-    root = HOME_DIR / ".floeva" / "workbuddy" / profile["client_id"]
+    storage_key = profile.get("storage_key")
+    if isinstance(storage_key, str):
+        root = HOME_DIR / ".floeva" / "agents" / storage_key
+    else:
+        # WorkBuddy's reviewed storage contract is intentionally unchanged.
+        root = HOME_DIR / ".floeva" / "workbuddy" / profile["client_id"]
     return {
         "root": root,
         "instance": root / "instance.json",
@@ -354,6 +405,8 @@ def _ensure_installation_identity(profile: dict[str, Any]) -> dict[str, Any]:
         "client_instance_id": client_instance_id,
         "created_at": int(time.time()),
     }
+    if profile.get("bind_agent_name"):
+        identity["agent_name"] = profile["agent_name"]
     _atomic_write_json(path, identity)
     return identity
 
@@ -372,6 +425,8 @@ def _load_installation_identity(profile: dict[str, Any]) -> dict[str, Any]:
         or not CLIENT_INSTANCE_PATTERN.fullmatch(instance_id)
     ):
         raise CliError("Floeva installation identity is invalid.")
+    if profile.get("bind_agent_name") and identity.get("agent_name") != profile["agent_name"]:
+        raise CliError("Floeva installation identity belongs to another Agent.")
     return identity
 
 
@@ -393,6 +448,8 @@ def _start_authorization(profile: dict[str, Any], region: str) -> None:
     request_payload = {"client_id": profile["client_id"], "scope": SCOPE}
     if identity is not None:
         request_payload["client_instance_id"] = identity["client_instance_id"]
+    if "agent_name" in profile:
+        request_payload["agent_name"] = profile["agent_name"]
     status, response = _request_json(
         f"{base_url}/open/oauth/device/code", request_payload
     )
@@ -432,6 +489,8 @@ def _start_authorization(profile: dict[str, Any], region: str) -> None:
     }
     if identity is not None:
         session["client_instance_id"] = identity["client_instance_id"]
+    if profile.get("bind_agent_name"):
+        session["agent_name"] = profile["agent_name"]
     _atomic_write_json(session_path, session)
     if profile["dedicated_store"]:
         print(verification_url, flush=True)
@@ -471,6 +530,8 @@ def _load_session_for(
             identity = _load_installation_identity(profile)
             if session.get("client_instance_id") != identity["client_instance_id"]:
                 raise CliError("The pending Floeva authorization belongs to another installation.")
+        if profile.get("bind_agent_name") and session.get("agent_name") != profile["agent_name"]:
+            raise CliError("The pending Floeva authorization belongs to another Agent.")
         session["expires_at"] = _positive_int(session.get("expires_at"), "expires_at")
         session["interval"] = _positive_int(session.get("interval"), "interval")
         if session["interval"] > MAX_POLL_INTERVAL_SECONDS:
@@ -545,6 +606,8 @@ def _complete_authorization(profile: dict[str, Any]) -> None:
             raise CliError("The Floeva authorization belongs to another installation.")
         credential["client_id"] = profile["client_id"]
         credential["client_instance_id"] = identity["client_instance_id"]
+    if profile.get("bind_agent_name"):
+        credential["agent_name"] = profile["agent_name"]
     _atomic_write_json(credential_path, credential)
     session_path.unlink(missing_ok=True)
     print("authorized" if profile["dedicated_store"] else "Floeva web authorization completed.")
@@ -593,6 +656,8 @@ def _credential_contract_is_valid(
     if profile["requires_instance"]:
         valid = valid and identity is not None and config.get("client_id") == profile["client_id"]
         valid = valid and config.get("client_instance_id") == identity.get("client_instance_id")
+    if profile.get("bind_agent_name"):
+        valid = valid and config.get("agent_name") == profile["agent_name"]
     return bool(valid)
 
 
@@ -655,9 +720,41 @@ def _load_workbuddy_credential(
     return credential
 
 
+def _require_legacy_credential(profile: dict[str, Any]) -> dict[str, Any]:
+    """Read only the original no-flag scope; never use it for a named Agent."""
+    if profile["requires_instance"]:
+        raise CliError("Floeva authorization is missing or expired.", exit_code=4)
+    path = _client_paths(profile)["credential"]
+    assert isinstance(path, Path)
+    if not path.is_file():
+        raise CliError("Floeva authorization is missing or expired.", exit_code=4)
+    _require_private_file(path)
+    credential = _load_json(path)
+    if _credential_contract_is_valid(credential, profile, None):
+        try:
+            expires_at = int(credential.get("expires_at"))
+        except (TypeError, ValueError) as exc:
+            raise CliError("Floeva authorization state is invalid.") from exc
+        if int(time.time()) >= expires_at - EXPIRY_SKEW_SECONDS:
+            raise CliError("Floeva authorization is missing or expired.", exit_code=4)
+        return credential
+    api_key = credential.get("api_key")
+    base_url = credential.get("base_url")
+    region = credential.get("region")
+    if (
+        isinstance(api_key, str)
+        and api_key
+        and base_url in profile["base_urls"].values()
+        and (region is None or profile["base_urls"].get(region) == base_url)
+    ):
+        # Keep the legacy file untouched while presenting the fixed transport shape.
+        return {"access_token": api_key, "base_url": base_url}
+    raise CliError("Floeva authorization state is invalid.")
+
+
 def _require_workbuddy_credential(profile: dict[str, Any]) -> dict[str, Any]:
     if not profile["requires_instance"]:
-        raise CliError("This command is only available for managed connector clients.")
+        return _require_legacy_credential(profile)
     identity = _load_installation_identity(profile)
     credential = _load_workbuddy_credential(profile, identity)
     if credential is None:
@@ -671,7 +768,9 @@ def _require_workbuddy_credential(profile: dict[str, Any]) -> dict[str, Any]:
     return credential
 
 
-def _allowed_tool_definitions(credential: dict[str, Any]) -> list[dict[str, Any]]:
+def _allowed_tool_definitions(
+    credential: dict[str, Any], profile: dict[str, Any]
+) -> list[dict[str, Any]]:
     data = _request_open_api_json(credential, "/open/v1/tool/list")
     if not isinstance(data, dict) or not isinstance(data.get("tools"), list):
         raise CliError("Floeva returned an invalid tool list.")
@@ -684,11 +783,10 @@ def _allowed_tool_definitions(credential: dict[str, Any]) -> list[dict[str, Any]
         if not isinstance(function, dict):
             raise CliError("Floeva returned an invalid tool list.")
         name = function.get("name")
-        if (
-            not isinstance(name, str)
-            or not TOOL_NAME_PATTERN.fullmatch(name)
-            or name not in WORKBUDDY_ALLOWED_TOOLS
-        ):
+        if not isinstance(name, str) or not TOOL_NAME_PATTERN.fullmatch(name):
+            continue
+        allowlist = profile.get("tool_allowlist")
+        if allowlist is not None and name not in allowlist:
             continue
         if name in seen:
             raise CliError("Floeva returned an invalid tool list.")
@@ -697,27 +795,27 @@ def _allowed_tool_definitions(credential: dict[str, Any]) -> list[dict[str, Any]
     return allowed
 
 
-def list_workbuddy_tools(profile: dict[str, Any]) -> None:
+def list_managed_tools(profile: dict[str, Any]) -> None:
     credential = _require_workbuddy_credential(profile)
     print(
         json.dumps(
-            {"tools": _allowed_tool_definitions(credential)},
+            {"tools": _allowed_tool_definitions(credential, profile)},
             ensure_ascii=False,
             separators=(",", ":"),
         )
     )
 
 
-def workbuddy_health_overview(profile: dict[str, Any]) -> None:
+def managed_health_overview(profile: dict[str, Any]) -> None:
     credential = _require_workbuddy_credential(profile)
     result = _request_open_api_json(credential, "/open/v1/health/overview")
     print(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
 
 
-def call_workbuddy_tool(profile: dict[str, Any], tool_name: str, raw_arguments: str) -> None:
-    if (
-        not TOOL_NAME_PATTERN.fullmatch(tool_name)
-        or tool_name not in WORKBUDDY_ALLOWED_TOOLS
+def call_managed_tool(profile: dict[str, Any], tool_name: str, raw_arguments: str) -> None:
+    allowlist = profile.get("tool_allowlist")
+    if not TOOL_NAME_PATTERN.fullmatch(tool_name) or (
+        allowlist is not None and tool_name not in allowlist
     ):
         raise CliError("Unsupported Floeva tool.")
     if len(raw_arguments.encode("utf-8")) > MAX_ARGUMENTS_BYTES:
@@ -730,7 +828,8 @@ def call_workbuddy_tool(profile: dict[str, Any], tool_name: str, raw_arguments: 
         raise CliError("Floeva tool arguments must be a JSON object.")
     credential = _require_workbuddy_credential(profile)
     available_names = {
-        definition["function"]["name"] for definition in _allowed_tool_definitions(credential)
+        definition["function"]["name"]
+        for definition in _allowed_tool_definitions(credential, profile)
     }
     if tool_name not in available_names:
         raise CliError("The requested Floeva tool is not available.")
@@ -800,6 +899,10 @@ def _parse_named_options(args: list[str], allowed: set[str]) -> dict[str, str]:
 
 
 def _profile_from_options(options: dict[str, str]) -> dict[str, Any]:
+    if "--agent-name" in options:
+        if "--client" in options:
+            raise CliError("Choose either --agent-name or --client, not both.")
+        return _agent_profile(options["--agent-name"])
     return _require_client_profile(options.get("--client", LEGACY_CLIENT_ID))
 
 
@@ -810,42 +913,42 @@ def main(argv: list[str]) -> int:
         if command == "start" and len(args) == 1 and not args[0].startswith("--"):
             start_authorization(args[0])
         elif command == "start":
-            options = _parse_named_options(args, {"--client", "--region"})
+            options = _parse_named_options(args, {"--client", "--agent-name", "--region"})
             profile = _profile_from_options(options)
             _start_authorization(profile, options.get("--region", ""))
         elif command == "auth":
-            options = _parse_named_options(args, {"--client", "--region"})
+            options = _parse_named_options(args, {"--client", "--agent-name", "--region"})
             authorize_client(_profile_from_options(options), options.get("--region", ""))
         elif command == "complete":
-            options = _parse_named_options(args, {"--client"})
+            options = _parse_named_options(args, {"--client", "--agent-name"})
             _complete_authorization(_profile_from_options(options))
         elif command == "status":
-            options = _parse_named_options(args, {"--client"})
+            options = _parse_named_options(args, {"--client", "--agent-name"})
             profile = _profile_from_options(options)
             _credential_status(profile, read_only=profile["dedicated_store"])
         elif command == "init":
-            options = _parse_named_options(args, {"--client"})
+            options = _parse_named_options(args, {"--client", "--agent-name"})
             initialize_client(_profile_from_options(options))
         elif command == "logout":
-            options = _parse_named_options(args, {"--client"})
+            options = _parse_named_options(args, {"--client", "--agent-name"})
             logout_client(_profile_from_options(options))
         elif command == "cleanup-local":
-            options = _parse_named_options(args, {"--client"})
+            options = _parse_named_options(args, {"--client", "--agent-name"})
             logout_client(_profile_from_options(options), local_only=True)
         elif command == "purge":
-            options = _parse_named_options(args, {"--client"})
+            options = _parse_named_options(args, {"--client", "--agent-name"})
             purge_client(_profile_from_options(options))
         elif command == "tools":
-            options = _parse_named_options(args, {"--client"})
-            list_workbuddy_tools(_profile_from_options(options))
+            options = _parse_named_options(args, {"--client", "--agent-name"})
+            list_managed_tools(_profile_from_options(options))
         elif command == "overview":
-            options = _parse_named_options(args, {"--client"})
-            workbuddy_health_overview(_profile_from_options(options))
+            options = _parse_named_options(args, {"--client", "--agent-name"})
+            managed_health_overview(_profile_from_options(options))
         elif command == "call":
-            options = _parse_named_options(args, {"--client", "--tool", "--arguments"})
+            options = _parse_named_options(args, {"--client", "--agent-name", "--tool", "--arguments"})
             if "--tool" not in options or "--arguments" not in options:
                 raise CliError("Floeva call requires --tool and --arguments.")
-            call_workbuddy_tool(
+            call_managed_tool(
                 _profile_from_options(options), options["--tool"], options["--arguments"]
             )
         else:

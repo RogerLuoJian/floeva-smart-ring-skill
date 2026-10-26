@@ -50,7 +50,28 @@ Floeva has enough data to establish one.
 
 On first use, the Agent asks whether you use Floeva Global or China, then gives you a 10-minute Floeva website link and matching code. Sign in on that page, approve, and return to the Agent. The resulting access token is valid for up to 90 days and can be revoked from Floeva's API credential management screen.
 
-Authorization is stored in `~/.floeva/config.json` with file mode `0600`. The access token is time-limited and can be replaced by authorizing again. Existing legacy `api_key` configs remain supported during migration.
+New Agent integrations declare their own product name (for example `Codex` or
+`Claude`) with `--agent-name`. The official shared client creates a stable
+random installation identity and keeps each Agent's credential and pending
+session under a private hashed `~/.floeva/agents/<hash>/` scope, so a new
+authorization cannot replace another Agent's connection. The product name is
+explicitly supplied by the Agent; it is never guessed from the host or runtime.
+Existing no-flag installations remain compatible with their legacy
+`~/.floeva/config.json` / `api_key` migration path.
+
+For an Agent-aware integration, use the same declared name for every command:
+
+```bash
+python3 scripts/floeva-auth.py status --agent-name 'Codex'
+python3 scripts/floeva-auth.py start --agent-name 'Codex' --region global
+python3 scripts/floeva-auth.py complete --agent-name 'Codex'
+python3 scripts/floeva-auth.py overview --agent-name 'Codex'
+python3 scripts/floeva-report.py prepare --agent-name 'Codex'
+```
+
+Use the helper for `tools`, `call`, `overview`, `logout`, and reports; do not
+read credential files or make direct HTTP calls. If the Agent cannot state its
+product name, it must ask the user before authorizing.
 
 ## Configuration
 
@@ -73,6 +94,9 @@ Existing configs containing `api_key` and `base_url` continue to work unchanged.
 - Passwords stay on the Floeva-owned authorization page and are never shared with the Agent.
 - Access tokens and pending device codes are stored only under `~/.floeva` with restricted permissions.
 - Config updates use an atomic replace, so an interrupted authorization does not corrupt an existing credential.
+- Declared Agent products use a stable random `client_instance_id`, sent with
+  their Device Flow requests alongside the declared `agent_name`; their hashed
+  local storage scopes prevent cross-Agent credential or pending-session reuse.
 - Verification links are accepted only from the expected HTTPS Floeva domain for the selected region.
 - Visual reports bind only to `127.0.0.1`, use opaque session URLs, expire after
   one hour, and are stored under `~/.floeva/reports` with private permissions.

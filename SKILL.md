@@ -21,10 +21,24 @@ The same skill directory also contains `scripts/floeva-report.py` and the
 `assets/health-report/` visual runtime. Never use a report helper or assets from
 another directory.
 
-Check credential status without printing the config or secret:
+Existing legacy installations may keep their original no-flag flow and helper
+commands. Check their current state without reading the config:
 
 ```bash
 bash <skill-dir>/scripts/floeva-auth.sh status
+```
+
+For a new Agent integration, explicitly identify the current Agent product name
+(for example `Codex` or `Claude`). Do not guess it from the host, environment,
+or installation path. If it is not known, ask the user. Use that declared name
+on every helper command; it gives each Agent its own stable installation
+identity and credential/session scope. A declared Agent must never fall back to
+the legacy shared config.
+
+For a declared Agent, check credential status without printing the config or secret:
+
+```bash
+bash <skill-dir>/scripts/floeva-auth.sh status --agent-name 'Codex'
 ```
 
 - `oauth` with exit `0`: use the current `access_token`.
@@ -49,7 +63,7 @@ Ask which Floeva service the user uses only when it is not already in config:
 Start authorization with `global` or `cn`:
 
 ```bash
-bash <skill-dir>/scripts/floeva-auth.sh start global
+bash <skill-dir>/scripts/floeva-auth.sh start --agent-name 'Codex' --region global
 ```
 
 Show the returned Floeva URL and user code. Ask the user to open the URL, confirm the matching code, sign in on the Floeva-owned page, and tell you when approval is complete. Do not ask for their password.
@@ -57,7 +71,7 @@ Show the returned Floeva URL and user code. Ask the user to open the URL, confir
 After the user confirms, complete the exchange:
 
 ```bash
-bash <skill-dir>/scripts/floeva-auth.sh complete
+bash <skill-dir>/scripts/floeva-auth.sh complete --agent-name 'Codex'
 ```
 
 - Exit `0`: authorization succeeded; continue to the request. The credential is valid for up to 90 days.
@@ -68,15 +82,16 @@ Do not poll in a long blocking loop. The two-step interaction keeps authorizatio
 
 ## 3. Execute requests
 
-After `status` returns `oauth` or `legacy`, read the credential into shell variables without printing it:
+After `status` returns `oauth`, use the helper for every data operation. Never
+read, `cat`, or copy a credential file, and never construct a direct HTTP
+request. The helper reads only the matching declared-Agent scope and does not
+fall back to legacy authorization. Use the same `--agent-name 'Codex'` on
+`tools`, `call`, `overview`, `logout`, and report preparation.
 
-```bash
-ACCESS_TOKEN=$(python3 -c "import json,os; c=json.load(open(os.path.expanduser('~/.floeva/config.json'))); print(c.get('access_token') or c.get('api_key') or '')")
-BASE_URL=$(python3 -c "import json,os; c=json.load(open(os.path.expanduser('~/.floeva/config.json'))); print(c['base_url'])")
-AUTH_MODE=$(python3 -c "import json,os; c=json.load(open(os.path.expanduser('~/.floeva/config.json'))); print(c.get('auth_mode') or 'legacy')")
-```
-
-Always send `Authorization: Bearer $ACCESS_TOKEN` over HTTPS.
+Existing no-flag installations that return `oauth` or `legacy` use the same
+CLI commands without `--agent-name` (for example `overview`, `tools`, and
+`call`). Those commands read only the original legacy scope; they do not create
+an installation identity or overwrite the legacy config.
 
 Before presenting any successful health-data response, read
 `references/data-presentation.md` completely. Use its hierarchy, units,
@@ -88,9 +103,7 @@ dashboard, chart, graph, visual, or prettier presentation, also read
 ### List capabilities
 
 ```bash
-curl -sS -m 30 -w "\n%{http_code}" \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
-  "$BASE_URL/open/v1/tool/list"
+python3 <skill-dir>/scripts/floeva-auth.py tools --agent-name 'Codex'
 ```
 
 Present tool names, descriptions, and parameters clearly.
@@ -98,9 +111,7 @@ Present tool names, descriptions, and parameters clearly.
 ### Health overview
 
 ```bash
-curl -sS -m 30 -w "\n%{http_code}" \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
-  "$BASE_URL/open/v1/health/overview"
+python3 <skill-dir>/scripts/floeva-auth.py overview --agent-name 'Codex'
 ```
 
 Summarize sleep, heart-rate trends, steps, and available baseline context in
@@ -119,7 +130,7 @@ report, or more beautiful presentation.
 Prepare the private report directly from the authorized Floeva service:
 
 ```bash
-python3 <skill-dir>/scripts/floeva-report.py prepare
+python3 <skill-dir>/scripts/floeva-report.py prepare --agent-name 'Codex'
 ```
 
 This command prints one non-secret JSON object containing the random local URL,
@@ -137,11 +148,8 @@ view without claiming that an immersive report was created.
 ### Help and FAQ
 
 ```bash
-curl -sS -m 30 -w "\n%{http_code}" -X POST \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"toolName":"get_help","arguments":{"query":"<keywords>","language":"zh"}}' \
-  "$BASE_URL/open/v1/tool/execute"
+python3 <skill-dir>/scripts/floeva-auth.py call --agent-name 'Codex' \
+  --tool get_help --arguments '{"query":"<keywords>","language":"zh"}'
 ```
 
 Optional `get_help` arguments:
@@ -155,11 +163,8 @@ Optional `get_help` arguments:
 If the tool contract is unknown, list capabilities first. Then call:
 
 ```bash
-curl -sS -m 30 -w "\n%{http_code}" -X POST \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"toolName":"<tool_name>","arguments":{<tool_arguments>}}' \
-  "$BASE_URL/open/v1/tool/execute"
+python3 <skill-dir>/scripts/floeva-auth.py call --agent-name 'Codex' \
+  --tool <tool_name> --arguments '{<tool_arguments>}'
 ```
 
 Interpret the result for the user; do not present raw health data as a medical diagnosis.
@@ -169,10 +174,11 @@ beside any interpretation that depends on sample count or days recorded.
 
 ## 4. Handle errors
 
-The final line emitted by each request is the HTTP status.
+The helper emits safe status text or business JSON only; it never prints the
+credential, installation identity, or local config path.
 
-- `401` with `AUTH_MODE=device_authorization`: restart web authorization in the saved region.
-- `401` with `AUTH_MODE=legacy`: explain that the legacy credential no longer works and offer web authorization. Do not ask the user to paste another API key.
+- `401` for a declared Agent: restart web authorization using the same `--agent-name` and saved region.
+- `401` for a legacy no-flag installation: explain that its legacy credential no longer works and offer web authorization. Do not ask the user to paste another API key.
 - `429`: explain that the daily call limit is reached; do not reauthorize.
 - Timeout/network failure: ask the user to retry after checking connectivity.
 - Other errors: show the response `msg` without exposing the credential or config file.
@@ -180,10 +186,10 @@ The final line emitted by each request is the HTTP status.
 ## Security rules
 
 - Never ask for, echo, log, or include Floeva passwords or tokens in conversation output.
-- Store authorization data only in `~/.floeva/config.json` with mode `0600`.
+- Legacy authorization stays in `~/.floeva/config.json`; declared-Agent authorization stays only in its private hashed `~/.floeva/agents/<hash>/` scope, with mode `0600` files.
 - Never put access tokens in URLs, query strings, source files, or shell history.
 - Use only the verification URL returned by the Floeva API and only HTTPS Floeva domains.
-- Remove the short-lived `~/.floeva/device-authorization.json` after success or expiry.
+- Remove each matching short-lived device-authorization session after success or expiry.
 - Keep visual-report data under `~/.floeva/reports` only; never upload it or
   expose its localhost server beyond `127.0.0.1`.
 - Never include an access token, API key, config file, device code, or remote

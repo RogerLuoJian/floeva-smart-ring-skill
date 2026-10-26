@@ -100,6 +100,7 @@ class WorkBuddyAuthorizationModeTest(unittest.TestCase):
         request_payload = start_request.call_args.args[1]
         self.assertEqual(instance_id, request_payload["client_instance_id"])
         self.assertEqual("floeva-workbuddy-cn", request_payload["client_id"])
+        self.assertEqual("WorkBuddy", request_payload["agent_name"])
 
         complete_request = mock.Mock(
             return_value=(

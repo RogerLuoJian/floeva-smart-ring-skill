@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -59,6 +60,19 @@ class CliError(Exception):
     """A safe command-line error that never contains credentials."""
 
 
+def _agent_credential_file(agent_name: str) -> Path:
+    name = agent_name.strip()
+    bidi_controls = {0x061C, *range(0x200E, 0x2010), *range(0x202A, 0x202F), *range(0x2066, 0x206A)}
+    if (
+        not name
+        or len(name) > 64
+        or any(not char.isprintable() or ord(char) in bidi_controls for char in name)
+    ):
+        raise CliError("Agent name must be 1-64 printable characters without control characters.")
+    storage_key = hashlib.sha256(name.encode("utf-8")).hexdigest()
+    return CONFIG_DIR / "agents" / storage_key / "credential.json"
+
+
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(
         self,
@@ -108,10 +122,15 @@ def _load_json(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _load_config() -> tuple[str, str, str]:
-    if not CONFIG_FILE.is_file():
+def _load_config(
+    config_file: Path | None = None, expected_agent_name: str | None = None
+) -> tuple[str, str, str]:
+    selected_file = config_file or CONFIG_FILE
+    if not selected_file.is_file():
         raise CliError("Floeva authorization is missing. Authorize first.")
-    config = _load_json(CONFIG_FILE)
+    config = _load_json(selected_file)
+    if expected_agent_name is not None and config.get("agent_name") != expected_agent_name.strip():
+        raise CliError("Floeva authorization state does not match this Agent.")
     base_url = config.get("base_url")
     if base_url not in ALLOWED_BASE_URLS:
         raise CliError("Floeva authorization has an invalid data region.")
@@ -132,8 +151,10 @@ def _load_config() -> tuple[str, str, str]:
     return token, base_url, region
 
 
-def _fetch_health_overview() -> tuple[dict[str, Any], str]:
-    token, base_url, region = _load_config()
+def _fetch_health_overview(
+    config_file: Path | None = None, expected_agent_name: str | None = None
+) -> tuple[dict[str, Any], str]:
+    token, base_url, region = _load_config(config_file, expected_agent_name)
     request = urllib.request.Request(
         f"{base_url}/open/v1/health/overview",
         headers={
@@ -434,7 +455,8 @@ def _prepare_command(args: argparse.Namespace) -> None:
         payload = _load_json(Path(args.input))
         region = args.region
     else:
-        payload, region = _fetch_health_overview()
+        credential_file = _agent_credential_file(args.agent_name) if args.agent_name else None
+        payload, region = _fetch_health_overview(credential_file, args.agent_name)
     result = prepare_report(payload, region, port=args.port)
     print(json.dumps(result, separators=(",", ":"), ensure_ascii=False))
 
@@ -477,6 +499,10 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--input", help="read a saved health-overview response")
     prepare.add_argument("--region", choices=("global", "cn"), default="global")
     prepare.add_argument("--port", type=int, default=REPORT_PORT)
+    prepare.add_argument(
+        "--agent-name",
+        help="declared Agent product name; selects its isolated authorization",
+    )
 
     serve = subparsers.add_parser("serve", help="serve reports on localhost")
     serve.add_argument("--port", type=int, default=REPORT_PORT)
