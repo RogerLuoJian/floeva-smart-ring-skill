@@ -17,21 +17,23 @@ and warm language. It must stay non-diagnostic.
 ## Prepare and serve
 
 Locate `scripts/floeva-report.py` beside `SKILL.md`, using the same installed
-directory resolution as the authorization helper.
+directory resolution as the authorization helper. Replace `<skill-dir>` with
+this installation's absolute path and `<declared-agent-name>` with the exact
+product name already used for authorization. Do not use either placeholder literally.
 
 1. Confirm authorization in the matching scope. Existing legacy installations
    use `floeva-auth.sh status`; a declared Agent uses the same explicit product
    name on both commands and must not fall back to the legacy scope:
 
    ```bash
-   bash <skill-dir>/scripts/floeva-auth.sh status --agent-name 'Codex'
+   bash "<skill-dir>/scripts/floeva-auth.sh" status --agent-name '<declared-agent-name>'
    ```
 
 2. Prepare a report. The helper fetches the official overview itself so the
    credential never has to appear in an Agent command:
 
    ```bash
-   python3 <skill-dir>/scripts/floeva-report.py prepare --agent-name 'Codex'
+   python3 "<skill-dir>/scripts/floeva-report.py" prepare --agent-name '<declared-agent-name>'
    ```
 
    Existing legacy installations keep the original no-flag `status` and
@@ -45,7 +47,7 @@ directory resolution as the authorization helper.
 5. If needed, start the long-running server and keep its process handle:
 
    ```bash
-   python3 <skill-dir>/scripts/floeva-report.py serve --port 5176
+   python3 "<skill-dir>/scripts/floeva-report.py" serve --port 5176
    ```
 
    Wait for the line beginning `READY` before opening the report URL.
@@ -56,7 +58,7 @@ directory resolution as the authorization helper.
    done, remove that exact session:
 
    ```bash
-   python3 <skill-dir>/scripts/floeva-report.py cleanup <session>
+   python3 "<skill-dir>/scripts/floeva-report.py" cleanup <session>
    ```
 
 Stop only the server process started by the current task. Do not kill an

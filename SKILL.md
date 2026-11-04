@@ -9,23 +9,22 @@ Use Floeva's official web authorization to access a user's smart-ring health dat
 
 ## 1. Load configuration
 
-Locate `scripts/floeva-auth.sh` beside this `SKILL.md`. If the platform does not expose the skill directory, check these installed paths:
+This Skill is Agent-independent. It requires a host that can load standard
+`SKILL.md` instructions, read bundled files, and run Bash and Python 3 with
+network access. A local browser is optional for visual reports.
 
-```bash
-~/.codex/skills/floeva-smart-ring/scripts/floeva-auth.sh
-~/.claude/skills/floeva-smart-ring/scripts/floeva-auth.sh
-~/.openclaw/skills/floeva-smart-ring/scripts/floeva-auth.sh
-```
-
-The same skill directory also contains `scripts/floeva-report.py` and the
-`assets/health-report/` visual runtime. Never use a report helper or assets from
-another directory.
+Resolve `<skill-dir>` from the current Skill's actual file location or the
+host's Skill metadata. Locate `scripts/floeva-auth.sh` relative to this
+`SKILL.md`; the same directory must contain `scripts/floeva-report.py`,
+`references/`, and `assets/health-report/`. Installation paths are arbitrary:
+never derive them from the Agent product name or select another Agent's copy.
+If the host does not expose the location, ask for the installation directory.
 
 Existing legacy installations may keep their original no-flag flow and helper
 commands. Check their current state without reading the config:
 
 ```bash
-bash <skill-dir>/scripts/floeva-auth.sh status
+bash "<skill-dir>/scripts/floeva-auth.sh" status
 ```
 
 For a new Agent integration, explicitly identify the current Agent product name
@@ -35,10 +34,15 @@ on every helper command; it gives each Agent its own stable installation
 identity and credential/session scope. A declared Agent must never fall back to
 the legacy shared config.
 
+In all examples below, replace `<declared-agent-name>` with the actual declared
+product name and `<skill-dir>` with this installation's absolute path. Keep the
+same exact product name across commands; these are placeholders, not literal values.
+No per-product registration or dedicated Floeva adapter is required.
+
 For a declared Agent, check credential status without printing the config or secret:
 
 ```bash
-bash <skill-dir>/scripts/floeva-auth.sh status --agent-name 'Codex'
+bash "<skill-dir>/scripts/floeva-auth.sh" status --agent-name '<declared-agent-name>'
 ```
 
 - `oauth` with exit `0`: use the current `access_token`.
@@ -63,7 +67,7 @@ Ask which Floeva service the user uses only when it is not already in config:
 Start authorization with `global` or `cn`:
 
 ```bash
-bash <skill-dir>/scripts/floeva-auth.sh start --agent-name 'Codex' --region global
+bash "<skill-dir>/scripts/floeva-auth.sh" start --agent-name '<declared-agent-name>' --region global
 ```
 
 Show the returned Floeva URL and user code. Ask the user to open the URL, confirm the matching code, sign in on the Floeva-owned page, and tell you when approval is complete. Do not ask for their password.
@@ -71,7 +75,7 @@ Show the returned Floeva URL and user code. Ask the user to open the URL, confir
 After the user confirms, complete the exchange:
 
 ```bash
-bash <skill-dir>/scripts/floeva-auth.sh complete --agent-name 'Codex'
+bash "<skill-dir>/scripts/floeva-auth.sh" complete --agent-name '<declared-agent-name>'
 ```
 
 - Exit `0`: authorization succeeded; continue to the request. The credential is valid for up to 90 days.
@@ -85,7 +89,7 @@ Do not poll in a long blocking loop. The two-step interaction keeps authorizatio
 After `status` returns `oauth`, use the helper for every data operation. Never
 read, `cat`, or copy a credential file, and never construct a direct HTTP
 request. The helper reads only the matching declared-Agent scope and does not
-fall back to legacy authorization. Use the same `--agent-name 'Codex'` on
+fall back to legacy authorization. Use the same `--agent-name '<declared-agent-name>'` on
 `tools`, `call`, `overview`, `logout`, and report preparation.
 
 Existing no-flag installations that return `oauth` or `legacy` use the same
@@ -103,7 +107,7 @@ dashboard, chart, graph, visual, or prettier presentation, also read
 ### List capabilities
 
 ```bash
-python3 <skill-dir>/scripts/floeva-auth.py tools --agent-name 'Codex'
+python3 "<skill-dir>/scripts/floeva-auth.py" tools --agent-name '<declared-agent-name>'
 ```
 
 Present tool names, descriptions, and parameters clearly.
@@ -111,7 +115,7 @@ Present tool names, descriptions, and parameters clearly.
 ### Health overview
 
 ```bash
-python3 <skill-dir>/scripts/floeva-auth.py overview --agent-name 'Codex'
+python3 "<skill-dir>/scripts/floeva-auth.py" overview --agent-name '<declared-agent-name>'
 ```
 
 Summarize sleep, heart-rate trends, steps, and available baseline context in
@@ -130,7 +134,7 @@ report, or more beautiful presentation.
 Prepare the private report directly from the authorized Floeva service:
 
 ```bash
-python3 <skill-dir>/scripts/floeva-report.py prepare --agent-name 'Codex'
+python3 "<skill-dir>/scripts/floeva-report.py" prepare --agent-name '<declared-agent-name>'
 ```
 
 This command prints one non-secret JSON object containing the random local URL,
@@ -148,7 +152,7 @@ view without claiming that an immersive report was created.
 ### Help and FAQ
 
 ```bash
-python3 <skill-dir>/scripts/floeva-auth.py call --agent-name 'Codex' \
+python3 "<skill-dir>/scripts/floeva-auth.py" call --agent-name '<declared-agent-name>' \
   --tool get_help --arguments '{"query":"<keywords>","language":"zh"}'
 ```
 
@@ -163,7 +167,7 @@ Optional `get_help` arguments:
 If the tool contract is unknown, list capabilities first. Then call:
 
 ```bash
-python3 <skill-dir>/scripts/floeva-auth.py call --agent-name 'Codex' \
+python3 "<skill-dir>/scripts/floeva-auth.py" call --agent-name '<declared-agent-name>' \
   --tool <tool_name> --arguments '{<tool_arguments>}'
 ```
 
