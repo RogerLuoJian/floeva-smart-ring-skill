@@ -4,6 +4,54 @@ set -eu
 SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 INSTALLED=0
 INSTALL_TEMP=""
+EXPLICIT_TARGET=0
+TARGET_DIR=""
+
+usage() {
+  cat <<'USAGE'
+Usage: ./install.sh [--target <skill-directory>]
+
+Install the complete Floeva Skill into any Agent's skill directory:
+  ./install.sh --target "$HOME/.agents/skills/floeva-smart-ring"
+  ./install.sh --target "$HOME/.hermes/skills/floeva-smart-ring"
+
+--target is the complete destination directory, including the skill folder name.
+Explicit installation writes only to that destination. Relative paths are allowed.
+Without options, install into existing Codex, Claude Code and OpenClaw directories;
+if none exist, use ~/.agents/skills/floeva-smart-ring. The Agent must be configured
+to discover the chosen directory and be able to run Bash and Python 3.
+USAGE
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --target)
+      if [ "$EXPLICIT_TARGET" -eq 1 ] || [ "$#" -lt 2 ] || [ -z "$2" ]; then
+        printf '%s\n' 'Provide --target exactly once with a nonempty skill directory.' >&2
+        exit 1
+      fi
+      case "$2" in
+        -*) printf '%s\n' 'Invalid target directory; use an absolute path or ./relative-path.' >&2; exit 1 ;;
+      esac
+      EXPLICIT_TARGET=1
+      TARGET_DIR="$2"
+      shift 2
+      ;;
+    --help|-h)
+      if [ "$#" -ne 1 ] || [ "$EXPLICIT_TARGET" -eq 1 ]; then
+        printf '%s\n' 'Use --help on its own.' >&2
+        exit 1
+      fi
+      usage
+      exit 0
+      ;;
+    *)
+      printf '%s\n' "Unknown argument: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
 
 cleanup() {
   [ -z "$INSTALL_TEMP" ] || rm -f "$INSTALL_TEMP"
@@ -72,13 +120,16 @@ install_to() {
   INSTALLED=$((INSTALLED + 1))
 }
 
-[ ! -d "$HOME/.codex" ] || install_to "$HOME/.codex/skills/floeva-smart-ring"
-[ ! -d "$HOME/.claude" ] || install_to "$HOME/.claude/skills/floeva-smart-ring"
-[ ! -d "$HOME/.openclaw" ] || install_to "$HOME/.openclaw/skills/floeva-smart-ring"
-
-if [ "$INSTALLED" -eq 0 ]; then
-  printf '%s\n' "No supported Agent directory found (~/.codex, ~/.claude, or ~/.openclaw)." >&2
-  exit 1
+if [ "$EXPLICIT_TARGET" -eq 1 ]; then
+  install_to "$TARGET_DIR"
+else
+  # Compatibility shortcuts, not a registry of supported Agent products.
+  [ ! -d "$HOME/.codex" ] || install_to "$HOME/.codex/skills/floeva-smart-ring"
+  [ ! -d "$HOME/.claude" ] || install_to "$HOME/.claude/skills/floeva-smart-ring"
+  [ ! -d "$HOME/.openclaw" ] || install_to "$HOME/.openclaw/skills/floeva-smart-ring"
+  if [ "$INSTALLED" -eq 0 ]; then
+    install_to "$HOME/.agents/skills/floeva-smart-ring"
+  fi
 fi
 
-printf '%s\n' "Done. Start a new Agent session and ask: Show my Floeva health overview as a visual report."
+printf '%s\n' "Files installed. Enable discovery of this directory in your Agent, then start a new session and ask: Show my Floeva health overview as a visual report."
